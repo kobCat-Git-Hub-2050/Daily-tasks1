@@ -673,8 +673,6 @@ const DEF_COLORS = { empty: '#424242', reg: '#1d4f8f', done: '#1f7a3d', bg: '#30
 const users = () => LS.get('tm.users') || [];
 const saveUsers = u => LS.set('tm.users', u);
 
-
-
 function normData(d) {
   d = d && typeof d === 'object' ? d : {};
   d.v = 1; d.entries = Array.isArray(d.entries) ? d.entries : [];
@@ -688,8 +686,6 @@ function normData(d) {
   if (!d.set.fonts || typeof d.set.fonts !== 'object') d.set.fonts = { day: 19, notes: 12, sub: 13 };
   return d;
 }
-
-
 
 const S = { user: null, data: null, set: null, view: { y: 1448, m: 1 }, sel: null, hidden: 0 };
 function persist() {
@@ -872,8 +868,6 @@ function allTypesIncludingBlocked() {
   return Array.from(new Set(base.concat(custom).concat(DEF_TYPES)));
 }
 
-
-
 function typeList() { return allTypes(); }
 
   /* فتح موقع في خرائط جوجل — يدعم المتصفح و APK */
@@ -956,8 +950,6 @@ function openMapsExternal(location) {
     fillTypes(nv);
   };
   f('ftypenew').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); f('ftypeadd').click(); } });
-  
-  
   
     // زر فتح خرائط جوجل للبحث
   f('fmapsearch').onclick = () => {
@@ -1050,8 +1042,7 @@ function openMapsExternal(location) {
   }, 'حذف');
   setTimeout(() => { if (!e) f('ftypesel').focus(); }, 60);
 }
-
-
+  
 /* ---------- types manager ---------- */
 function openTypesManager() {
   const s = openModal('<div class="shead"><div><h2>إدارة أنواع المناسبات</h2><div class="sub">أضف، عدّل، أو احذف الأنواع</div></div><button class="x" data-act="close">×</button></div>' +
