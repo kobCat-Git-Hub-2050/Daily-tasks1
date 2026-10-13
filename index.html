@@ -1073,9 +1073,6 @@ function openTypesManager() {
   $('#ntype', s).addEventListener('keydown', ev => { if (ev.key === 'Enter') $('#addtype', s).click(); });
   draw();
 }
-
-
-
 /* ---------- notifications ---------- */
 /* إرسال التنبيهات إلى Android لجدولتها */
 function syncAlarmsToAndroid() {
@@ -1121,7 +1118,6 @@ function checkNotifications() {
     syncAlarmsToAndroid();
     return;
   }
-
   // في المتصفح: نستخدم Notification API
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   for (const e of S.data.entries) {
@@ -1157,9 +1153,6 @@ window.__notifPermission = function(granted) {
     el.style.color = granted ? '#4caf50' : '#ff6b6b';
   }
 };
-
-
-
 /* ---------- mouse wheel navigation ---------- */
 (function () {
   let wheelLock = false;
