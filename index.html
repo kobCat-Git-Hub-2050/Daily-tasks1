@@ -1076,7 +1076,6 @@ function openTypesManager() {
 
 
 
--------------------------------------------------------------------------
 /* ---------- notifications ---------- */
 /* إرسال التنبيهات إلى Android لجدولتها */
 function syncAlarmsToAndroid() {
@@ -1390,6 +1389,7 @@ function openSettings() {
     '<label class="sw"><span>تفعيل التنبيه قبل المناسبة</span><input type="checkbox" id="nben"' + (S.set.notify?.enabled ? ' checked' : '') + '><span class="tg"></span></label>' +
     '<label class="f">عدد الأيام قبل المناسبة</label><input type="number" id="nbday" min="0" max="30" value="' + (S.set.notify?.days ?? 2) + '">' +
     '<div class="btns" style="margin-top:8px"><button class="btn sec" id="nbtest">🔔 اختبار التنبيه</button></div>' +
+    '<div id="nstatus" class="hint" style="text-align:center;margin-top:8px"></div>' +
     '<div class="sec-t">البيانات</div><div class="btns" style="margin-top:6px"><button class="btn sec" id="sx">تصدير إلى Excel 97-2003</button><button class="btn sec" id="si">استيراد من Excel 97-2003</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn sec" id="stypes">🏷️ إدارة أنواع المناسبات</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn danger" id="sd">حذف كل البيانات</button></div>' +
@@ -1404,7 +1404,8 @@ function openSettings() {
     $$('#sv button', s).forEach(b => b.classList.toggle('on', b.dataset.v === S.set.view));
   };
   const setOff = d => { S.set.off = Math.max(-30, Math.min(30, S.set.off + d)); persist(); render(); pv(); };
-  $('#om', s).onclick = () => setOff(-1); $('#op', s).onclick = () => setOff(1);
+  $('#om', s).onclick = () => setOff(-1);
+  $('#op', s).onclick = () => setOff(1);
   $$('#sv button', s).forEach(b => b.onclick = () => { S.set.view = b.dataset.v; S.view = viewFor(S.sel != null ? S.sel : todayN()); persist(); render(); pv(); });
   $('#kbg', s).addEventListener('input', ev => { S.set.colors.bg = ev.target.value; applyColors(); });
   $('#kbg', s).addEventListener('change', persist);
@@ -1422,20 +1423,18 @@ function openSettings() {
   $('#fsnotes', s).addEventListener('change', persist);
   $('#nben', s).addEventListener('change', ev => {
     S.set.notify.enabled = ev.target.checked;
-    // في APK: استخدم الجسر الأصلي
     if (window.AndroidBridge && window.AndroidBridge.requestNotificationPermission) {
       window.AndroidBridge.requestNotificationPermission();
     } else if (ev.target.checked && 'Notification' in window && Notification.permission !== 'granted') {
       Notification.requestPermission();
     }
     persist(); checkNotifications();
-  });  $('#nbday', s).addEventListener('change', ev => {
+  });
+  $('#nbday', s).addEventListener('change', ev => {
     S.set.notify.days = Math.max(0, Math.min(30, +ev.target.value || 0));
     persist(); checkNotifications();
   });
-  });
-
-   $('#nbtest', s).onclick = () => {
+  $('#nbtest', s).onclick = () => {
     const title = 'تقويمي – مهام';
     const body = 'هذا تنبيه تجريبي ✅';
     if (window.AndroidBridge) {
@@ -1465,7 +1464,6 @@ function openSettings() {
       if (p === 'granted') new Notification(title, { body });
     });
   };
-
   $('#sx', s).onclick = doExport;
   $('#si', s).onclick = () => $('#file').click();
   $('#stypes', s).onclick = openTypesManager;
@@ -1475,10 +1473,34 @@ function openSettings() {
   $('#sl', s).onclick = () => lockNow(false);
   $('#slo', s).onclick = () => lockNow(true);
   $('#smail', s).onclick = () => {
-    const subject = encodeURIComponent('تطبيق تقويمي – مهام');
-    const body = encodeURIComponent('مرحباً ' + DESIGNER.name + '،\n\n');
-    window.open('mailto:' + DESIGNER.email + '?subject=' + subject + '&body=' + body, '_blank');
+    const subject = 'تطبيق تقويمي – مهام';
+    const body = 'مرحباً ' + DESIGNER.name + '،\n\n';
+    if (window.AndroidBridge && window.AndroidBridge.sendEmail) {
+      window.AndroidBridge.sendEmail(DESIGNER.email, subject, body);
+      return;
+    }
+    window.open('mailto:' + DESIGNER.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   };
+  // عرض حالة التنبيهات
+  const updateNotifStatus = () => {
+    const el = $('#nstatus', s);
+    if (!el) return;
+    if (window.AndroidBridge) {
+      el.innerHTML = '📱 وضع التطبيق — التنبيهات تُدار عبر النظام';
+      el.style.color = '#4caf50';
+      return;
+    }
+    if (!('Notification' in window)) {
+      el.innerHTML = '⚠️ التنبيهات غير مدعومة في هذا المتصفح';
+      el.style.color = '#ff9d6b';
+      return;
+    }
+    const perm = Notification.permission;
+    if (perm === 'granted') { el.innerHTML = '✅ التنبيهات مسموحة'; el.style.color = '#4caf50'; }
+    else if (perm === 'denied') { el.innerHTML = '❌ التنبيهات محظورة — افتح إعدادات الموقع في المتصفح'; el.style.color = '#ff6b6b'; }
+    else { el.innerHTML = '⏳ اضغط "اختبار التنبيه" للموافقة'; el.style.color = '#f49426'; }
+  };
+  updateNotifStatus();
   pv();
 }
 
