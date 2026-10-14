@@ -1750,12 +1750,39 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') navMonth(1); else if (e.key === 'ArrowRight') navMonth(-1);
   else if (e.key === 'PageUp') navYear(-1); else if (e.key === 'PageDown') navYear(1); else if (e.key === 't' || e.key === 'T') gotoToday();
 });
-let tx = null, ty = 0;
-$('#grid').addEventListener('touchstart', e => { const t = e.changedTouches[0]; tx = t.clientX; ty = t.clientY; }, { passive: true });
-$('#grid').addEventListener('touchend', e => {
-  if (tx == null) return; const t = e.changedTouches[0], dx = t.clientX - tx, dy = t.clientY - ty; tx = null;
-  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) navMonth(dx < 0 ? 1 : -1);
+  
+/* ===== Touch navigation: swipe horizontally OR vertically to change months ===== */
+let tx = null, ty = 0, tTime = 0;
+$('#grid').addEventListener('touchstart', e => {
+  const t = e.changedTouches[0];
+  tx = t.clientX; ty = t.clientY; tTime = Date.now();
 }, { passive: true });
+$('#grid').addEventListener('touchend', e => {
+  if (tx == null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - tx;
+  const dy = t.clientY - ty;
+  const dt = Date.now() - tTime;
+  tx = null; ty = 0;
+  // تجاهل اللمسات البطيئة جداً (أكثر من 1.5 ثانية) — قد تكون تمريراً للقائمة
+  if (dt > 1500) return;
+  const absX = Math.abs(dx), absY = Math.abs(dy);
+  const THRESHOLD = 60;  // الحد الأدنى لحركة الإصبع (بكسل)
+  
+  // تحديد الاتجاه السائد (أفقي أم رأسي)
+  if (absX > absY) {
+    // سحب أفقي
+    if (absX > THRESHOLD && absX > absY * 1.5) {
+      navMonth(dx < 0 ? 1 : -1);  // يسار = التالي، يمين = السابق
+    }
+  } else {
+    // سحب رأسي
+    if (absY > THRESHOLD && absY > absX * 1.5) {
+      navMonth(dy < 0 ? 1 : -1);  // أعلى = التالي، أسفل = السابق
+    }
+  }
+}, { passive: true });
+  
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) S.hidden = Date.now();
   else if (S.user && S.hidden && Date.now() - S.hidden > 5 * 60 * 1000) lockNow(false);
