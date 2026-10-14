@@ -70,19 +70,6 @@ button{cursor:pointer}
 .cell.postponed .p,.cell.cancelled .p{color:#ffd9c9}
 .cell .badge-post{position:absolute;top:3px;left:3px;font-size:11px;background:#8b3a2a;color:#fff;border-radius:8px;padding:1px 5px;font-weight:700}
 .cell .badge-cancel{position:absolute;top:3px;left:3px;font-size:11px;background:#5a1f1f;color:#fff;border-radius:8px;padding:1px 5px;font-weight:700}
-.ent.postponed{border-inline-start-color:#ff7a3d;background:#3a2520}
-.ent.cancelled{border-inline-start-color:#c0392b;background:#3a1f1f;opacity:.85}
-.ent .status-badge{display:inline-block;font-size:11px;font-weight:700;border-radius:8px;padding:2px 7px;margin-inline-start:6px}
-.ent .status-badge.post{background:#ff7a3d;color:#fff}
-.ent .status-badge.cancel{background:#c0392b;color:#fff}
-.ent .reason-box{margin-top:6px;background:rgba(0,0,0,.25);border-radius:8px;padding:6px 9px;font-size:12.5px;color:#ffd9c9;border-inline-start:3px solid #ff7a3d}
-.ent .reason-box b{color:#fff}
-  /* ألوان خاصة للمؤجلة والملغاة */
-.cell.postponed{background:#8b3a2a !important;border:2px dashed #ffb088}
-.cell.cancelled{background:#5a1f1f !important;opacity:.75}
-.cell.postponed .p,.cell.cancelled .p{color:#ffd9c9}
-.cell .badge-post{position:absolute;top:3px;left:3px;font-size:11px;background:#8b3a2a;color:#fff;border-radius:8px;padding:1px 5px;font-weight:700}
-.cell .badge-cancel{position:absolute;top:3px;left:3px;font-size:11px;background:#5a1f1f;color:#fff;border-radius:8px;padding:1px 5px;font-weight:700}
   /* بطاقة المناسبة المؤجلة/الملغاة في تفاصيل اليوم */
 .ent.postponed{border-inline-start-color:#ff7a3d;background:#3a2520}
 .ent.cancelled{border-inline-start-color:#c0392b;background:#3a1f1f;opacity:.85}
@@ -1987,7 +1974,7 @@ const needWarn = () => !window.AndroidBridge && !LS.get('tm.nowarn') && (locatio
   SS.del('tm.s'); $('#grid').innerHTML = '';
   if (!logout && u) showLock(u); else showLogin();
 }
-function showRegister(first) {
+  function showRegister(first) {
   const el = overlay('<h2>إنشاء حساب</h2><p class="d">' + (first ? 'مرحبًا بك في تقويمي – مهام. أنشئ حسابك وحدد رقمًا سريًا للدخول.' : 'أنشئ حسابًا جديدًا على هذا الجهاز') + '</p><div id="aerr"></div>' +
     '<label for="rn">الاسم</label><input type="text" id="rn" autocomplete="name" maxlength="40">' +
     '<label for="rus">اسم المستخدم</label><input type="text" class="ltr" id="rus" autocomplete="username" autocapitalize="none" maxlength="30">' +
@@ -1996,15 +1983,34 @@ function showRegister(first) {
     '<label for="rpin">الرقم السري للدخول إلى التطبيق (4 – 8 أرقام)</label><input type="password" class="ltr" id="rpin" inputmode="numeric" maxlength="8" autocomplete="off">' +
     '<label for="rpin2">تأكيد الرقم السري</label><input type="password" class="ltr" id="rpin2" inputmode="numeric" maxlength="8" autocomplete="off">' +
     '<div class="btns"><button class="btn" id="rgo">إنشاء الحساب</button></div>' +
-    '<div class="btns"><button class="btn" id="rgo">إنشاء الحساب</button></div>' +
-    (users().length ? '<button class="lk" id="rback">لدي حساب — تسجيل الدخول</button>' : '') +
+    (users().length ? '<button class="lk" id="rback">لدي حساب — تسجيل الدخول (' + users().length + ' حساب محفوظ)</button>' : '') +
     '<button class="lk" id="rreset" style="color:#ff6b6b;font-size:13px">🧹 مسح البيانات القديمة والبدء من جديد</button>');
   const go = () => {
     const nm = $('#rn', el).value.trim(), un = $('#rus', el).value.trim(), p1 = $('#rp1', el).value, p2_ = $('#rp2', el).value, pin = norm($('#rpin', el).value).trim(), pin2 = norm($('#rpin2', el).value).trim();
     if (un.length < 3 || /\s/.test(un)) return aerr(el, 'اسم المستخدم 3 أحرف على الأقل وبدون مسافات.');
     const existingUser = users().find(x => x.username.toLowerCase() === un.toLowerCase());
     if (existingUser) {
-      // رسالة أكثر وضوحاً مع خيارات
+      // تحقق: هل الحساب موجود لكن "بحاجة لإعادة تعيين" (كلمة مرور فارغة)؟
+      const needsReset = !existingUser.hash || !existingUser.salt;
+      if (needsReset) {
+        // اسمح بالتسجيل: احتفظ بنفس id وحدّث كلمة المرور والرقم السري
+        if (p1.length < 6) return aerr(el, 'كلمة المرور يجب ألا تقل عن 6 أحرف.');
+        if (p1 !== p2_) return aerr(el, 'تأكيد كلمة المرور غير مطابق.');
+        if (!/^\d{4,8}$/.test(pin)) return aerr(el, 'الرقم السري يجب أن يتكون من 4 إلى 8 أرقام.');
+        if (pin !== pin2) return aerr(el, 'تأكيد الرقم السري غير مطابق.');
+        const salt = SHA.newSalt(), pinSalt = SHA.newSalt();
+        existingUser.name = nm || un;
+        existingUser.salt = salt;
+        existingUser.hash = SHA.salted(p1, salt);
+        existingUser.pinSalt = pinSalt;
+        existingUser.pinHash = SHA.salted(pin, pinSalt);
+        existingUser.pinLen = pin.length;
+        saveUsers(users());
+        toast('✅ تم إعادة تعيين كلمة المرور — جاري الدخول...');
+        enter(existingUser);
+        return;
+      }
+      // الحساب سليم بكلمة مرور: اسأل المستخدم
       const choice = confirm('يوجد حساب محفوظ بنفس اسم المستخدم على هذا الجهاز.\n\n' +
         '• اضغط "موافق" لتسجيل الدخول بالحساب القديم (سيُطلب منك كلمة المرور).\n' +
         '• اضغط "إلغاء" للبقاء في هذه الشاشة واستخدام اسم مستخدم آخر.');
@@ -2045,24 +2051,56 @@ function showRegister(first) {
     }
   };
 }
-function showLogin(o) {
+  function showLogin(o) {
   o = o || {};
-  const last = users().find(x => x.id === LS.get('tm.last'));
+  const us = users();
+  const last = us.find(x => x.id === LS.get('tm.last')) || us[0];
   const el = overlay('<h2>تسجيل الدخول</h2><p class="d">' + (o.resetPin ? 'سجّل الدخول بكلمة المرور ثم عيّن رقمًا سريًا جديدًا' : 'أدخل بيانات حسابك') + '</p><div id="aerr"></div>' +
-    '<label for="lus">اسم المستخدم</label><input type="text" class="ltr" id="lus" autocomplete="username" autocapitalize="none" value="' + esc(o.prefillUsername || (last ? last.username : '')) + '">' +                     
+    '<label for="lus">اسم المستخدم</label><input type="text" class="ltr" id="lus" autocomplete="username" autocapitalize="none" value="' + esc(o.prefillUsername || (last ? last.username : (us[0] ? us[0].username : ''))) + '">' +
+    (us.length > 1 ? '<div class="hint">📌 توجد ' + us.length + ' حسابات محفوظة على هذا الجهاز</div>' : '') +
     '<label for="lpw">كلمة المرور</label><input type="password" id="lpw" autocomplete="current-password">' +
-    '<div class="btns"><button class="btn" id="lgo">دخول</button></div><button class="lk" id="lnew">إنشاء حساب جديد</button>');
+    '<div class="btns"><button class="btn" id="lgo">دخول</button></div>' +
+    '<button class="lk" id="lnew">إنشاء حساب جديد</button>' +
+    (us.length ? '<button class="lk" id="lreset" style="color:#ff6b6b;font-size:13px">🔄 نسيت كلمة المرور — إعادة تعيين الحساب</button>' : ''));
   const go = () => {
     const un = $('#lus', el).value.trim().toLowerCase(), pw = $('#lpw', el).value;
     const u = users().find(x => x.username.toLowerCase() === un);
     if (!u || !pwOk(u, pw)) return aerr(el, 'اسم المستخدم أو كلمة المرور غير صحيحة.');
     enter(u, o.resetPin ? () => openPinForm({ reset: true }) : null);
   };
-  $('#lgo', el).onclick = go; $('#lnew', el).onclick = () => showRegister(false);
+  $('#lgo', el).onclick = go;
+  $('#lnew', el).onclick = () => showRegister(false);
   el.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  const lreset = $('#lreset', el);
+  if (lreset) lreset.onclick = () => {
+    const un = $('#lus', el).value.trim();
+    const u = users().find(x => x.username.toLowerCase() === un.toLowerCase());
+    if (!u) return aerr(el, 'اسم المستخدم غير موجود. اكتب اسم المستخدم أولاً.');
+    if (!confirm('سيتم إعادة تعيين كلمة المرور والرقم السري للحساب "' + u.username + '".\n\n⚠️ لن تُحذف بياناتك (المناسبات والمهام)، لكن ستحتاج لتعيين كلمة مرور ورقم سري جديدين بنفس اسم المستخدم.\n\nمتابعة؟')) return;
+    // احتفظ بنفس id، فقط امسح كلمة المرور والرقم السري
+    u.salt = '';
+    u.hash = '';
+    u.pinSalt = '';
+    u.pinHash = '';
+    u.pinLen = 4;
+    saveUsers(users());
+    toast('✅ تم تجهيز الحساب لإعادة التعيين. أنشئ كلمة مرور جديدة بنفس اسم المستخدم.');
+    setTimeout(() => {
+      removeOverlay();
+      showRegister(false);
+      // املأ اسم المستخدم تلقائياً في نموذج التسجيل
+      setTimeout(() => {
+        const el2 = document.getElementById('auth');
+        if (el2) {
+          const rus = el2.querySelector('#rus');
+          if (rus) rus.value = u.username;
+        }
+      }, 100);
+    }, 500);
+  };
   setTimeout(() => $(last ? '#lpw' : '#lus', el).focus(), 60);
 }
-function showLock(u) {
+  function showLock(u) {
   let buf = '', busy = false;
   const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => '<button data-k="' + k + '">' + k + '</button>').join('') + '<button class="o" data-k="c">مسح</button><button data-k="0">0</button><button class="o" data-k="b" aria-label="حذف">⌫</button>';
   const el = overlay('<h2>الرقم السري</h2><p class="d">مرحبًا ' + esc(u.name) + '</p><div class="dots" id="dots"></div><div id="aerr"></div><div class="keys">' + keys + '</div>' +
