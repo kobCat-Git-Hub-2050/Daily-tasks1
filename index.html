@@ -895,7 +895,14 @@ function waNum(p) {
   const sheet = openModal(daySheetHtml(n), { onClose: () => { dayOpen = null; } });
   dayOpen = { n, sheet };
 }
-function refreshDay() {
+  function daySheetHtml(n) {
+  const list = entriesOn(n);
+  return '<div class="shead"><div><h2>' + esc(WD[wday(n)] + ' ' + hStr(n)) + '</h2><div class="sub">' + esc(gStr(n)) + (n === todayN() ? ' · اليوم' : '') +
+    '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
+    '<div id="dlist">' + (list.map(entHtml).join('') || '<div class="empty">لا توجد مناسبات أو مهام في هذا اليوم</div>') + '</div>' +
+    '<div class="btns"><button class="btn" data-act="addDay" data-n="' + n + '">+ إضافة مناسبة / مهمة</button></div>';
+}
+  function refreshDay() {
   if (!dayOpen || !stack.some(m => m.sheet === dayOpen.sheet)) return;
   if (!entriesOn(dayOpen.n).length) closeModal(dayOpen.sheet); else dayOpen.sheet.innerHTML = daySheetHtml(dayOpen.n);
 }
