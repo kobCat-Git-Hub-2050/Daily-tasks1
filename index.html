@@ -889,32 +889,7 @@ function waNum(p) {
     '</div>';
 }
   
-  // نوع الرقم والرابط المناسب
-  const phoneType = e.phoneType || 'call';
-  const phoneLabel = phoneType === 'whatsapp' ? 'واتساب' : (phoneType === 'telegram' ? 'تيليجرام' : (phoneType === 'other' ? 'آخر' : 'اتصال'));
-  let phoneLink = '';
-  if (e.phone) {
-    if (phoneType === 'whatsapp') phoneLink = 'https://wa.me/' + wa;
-    else if (phoneType === 'telegram') phoneLink = 'https://t.me/+' + tel.replace(/^\+/, '');
-    else phoneLink = 'tel:' + tel;
-    phoneLink = '<a data-act="none" href="' + esc(phoneLink) + '" target="_blank" rel="noopener" title="' + phoneLabel + '">📞 ' + esc(e.phone) + ' (' + phoneLabel + ')</a>';
-  }
-  
-  return '<div class="ent' + (e.done ? ' done' : '') + extraClass + '" data-act="edit" data-id="' + e.id + '">' +
-    '<div class="t"><button class="tick" data-act="toggle" data-id="' + e.id + '" aria-label="تبديل حالة الإنجاز">✓</button>' +
-    '<b>' + esc(e.type || 'بدون نوع') + '</b>' + badge + '<span class="pill ' + (e.done ? 'ok' : 'wait') + '">' + (e.done ? 'أنجزت' : 'لم تنجز') + '</span></div>' +
-    (e.desc ? '<div class="meta" style="color:#e0b3ee;font-style:italic">📝 ' + esc(e.desc) + '</div>' : '') +
-    (e.name ? '<div class="meta">' + esc(e.name) + '</div>' : '') +
-    (phoneLink ? '<div class="meta" dir="ltr" style="text-align:right">' + phoneLink + '</div>' : '') +
-    (e.bank ? '<div class="meta">🏦 <span style="color:#c9c9c9">وصل البنك:</span> ' + esc(e.bank) + '</div>' : '') +
-    (e.loc ? '<div class="meta">📍 <a data-act="none" href="' + esc(locUrl) + '" target="_blank" rel="noopener">' + esc(e.loc) + '</a></div>' : '') +
-    ((e.paid != null || e.rem != null) ? '<div class="money"><span>المدفوع: <b>' + money(e.paid) + '</b></span><span>المتبقي: <b>' + money(e.rem) + '</b></span></div>' : '') +
-    (e.notes ? '<div class="note">' + esc(e.notes) + '</div>' : '') +
-    reasonBox +
-    ((isPostponed || isCancelled) ? '<div class="btns" style="margin-top:8px"><button class="btn sm sec" data-act="restore" data-id="' + e.id + '" type="button">♻️ استعادة كحالة عادية</button></div>' : '') +
-    '</div>';
-}
-function openDay(n) {
+  function openDay(n) {
   S.sel = n; render();
   if (!entriesOn(n).length) { openForm({ date: n }); return; }
   const sheet = openModal(daySheetHtml(n), { onClose: () => { dayOpen = null; } });
