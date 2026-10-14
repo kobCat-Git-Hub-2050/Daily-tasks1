@@ -703,6 +703,7 @@ function normData(d) {
 }
 
 const S = { user: null, data: null, set: null, view: { y: 1448, m: 1 }, sel: null, hidden: 0 };
+  let dayOpen = null;
 function persist() {
   if (!S.user) return;
   if (!LS.set('tm.d.' + S.user.id, S.data)) toast('تعذّر حفظ البيانات على الجهاز (التخزين معطّل أو ممتلئ)');
