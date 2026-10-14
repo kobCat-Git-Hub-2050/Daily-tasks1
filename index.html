@@ -218,6 +218,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="warn hide" id="warn"><span>نسخة غير مثبّتة (ملف أو عنوان مؤقت): قد لا تبقى بياناتك. صدّر نسخة Excel احتياطية بانتظام.</span><button data-act="exportNow">تصدير الآن</button><button data-act="warnx" aria-label="إخفاء التنبيه">×</button></div>
   <nav class="menu hide" id="menu">
     <button data-act="search">🔎 بحث وقائمة المهام</button>
+    <button data-act="phonebook">📞 دليل الهاتف</button>
     <button data-act="settings">⚙️ الإعدادات</button>
     <hr>
     <button data-act="export">📤 تصدير إلى Excel 97-2003</button>
@@ -805,14 +806,18 @@ function render() {
         st = ' postponed';
         statusBadge = '<span class="badge-post">مؤجلة</span>';
       }
-      const srt = list.slice().sort((x, y) => (x.ts || 0) - (y.ts || 0));
+        const srt = list.slice().sort((x, y) => (x.ts || 0) - (y.ts || 0));
       ev = srt.slice(0, 2).map(e => {
         const typeText = e.type || '';
         const descText = e.desc || '';
         let line = typeText;
         if (descText) line = typeText ? (typeText + ' - ' + descText) : descText;
         if (!line) line = e.name || e.notes || '•';
-        return '<div class="ev">' + esc(line) + '</div>';
+        // إذا كانت مؤجلة، أضف "مؤجلة" في سطر مستقل قبل النوع
+        let prefix = '';
+        if (e.postponed) prefix = '<div class="ev" style="color:#ffb088;font-weight:700">مؤجلة</div>';
+        else if (e.cancelled) prefix = '<div class="ev" style="color:#ff8a8a;font-weight:700">ملغاة</div>';
+        return prefix + '<div class="ev">' + esc(line) + '</div>';
       }).join('');
       if (list.length > 2) ev += '<div class="ev"><i dir="ltr">+' + (list.length - 2) + '</i></div>';
     }
@@ -851,23 +856,32 @@ function waNum(p) {
   const tel = norm(e.phone).replace(/[^\d+]/g, ''), wa = waNum(e.phone);
   const locUrl = e.loc ? (/^https?:\/\//i.test(e.loc) ? e.loc : 'https://maps.google.com/?q=' + encodeURIComponent(e.loc)) : '';
   
-  // حالة المناسبة: عادية / مؤجلة / ملغاة
   const isPostponed = !!e.postponed;
   const isCancelled = !!e.cancelled;
   const extraClass = isCancelled ? ' cancelled' : (isPostponed ? ' postponed' : '');
   
-  // شارة الحالة
   let badge = '';
   if (isCancelled) badge = '<span class="status-badge cancel">ملغاة</span>';
   else if (isPostponed) badge = '<span class="status-badge post">مؤجلة</span>';
   
-  // صندوق السبب والتاريخ الجديد
   let reasonBox = '';
   if (isPostponed || isCancelled) {
     const parts = [];
     if (isPostponed && e.newDate) parts.push('<div>📅 التاريخ الجديد: <b>' + esc(e.newDate) + '</b></div>');
+    if (isPostponed && !e.newDate) parts.push('<div>⏳ لم يُحدَّد تاريخ جديد بعد</div>');
     if (e.reason) parts.push('<div>السبب: ' + esc(e.reason) + '</div>');
     if (parts.length) reasonBox = '<div class="reason-box">' + parts.join('') + '</div>';
+  }
+  
+  // نوع الرقم والرابط المناسب
+  const phoneType = e.phoneType || 'call';
+  const phoneLabel = phoneType === 'whatsapp' ? 'واتساب' : (phoneType === 'telegram' ? 'تيليجرام' : (phoneType === 'other' ? 'آخر' : 'اتصال'));
+  let phoneLink = '';
+  if (e.phone) {
+    if (phoneType === 'whatsapp') phoneLink = 'https://wa.me/' + wa;
+    else if (phoneType === 'telegram') phoneLink = 'https://t.me/+' + tel.replace(/^\+/, '');
+    else phoneLink = 'tel:' + tel;
+    phoneLink = '<a data-act="none" href="' + esc(phoneLink) + '" target="_blank" rel="noopener" title="' + phoneLabel + '">📞 ' + esc(e.phone) + ' (' + phoneLabel + ')</a>';
   }
   
   return '<div class="ent' + (e.done ? ' done' : '') + extraClass + '" data-act="edit" data-id="' + e.id + '">' +
@@ -875,9 +889,7 @@ function waNum(p) {
     '<b>' + esc(e.type || 'بدون نوع') + '</b>' + badge + '<span class="pill ' + (e.done ? 'ok' : 'wait') + '">' + (e.done ? 'أنجزت' : 'لم تنجز') + '</span></div>' +
     (e.desc ? '<div class="meta" style="color:#e0b3ee;font-style:italic">📝 ' + esc(e.desc) + '</div>' : '') +
     (e.name ? '<div class="meta">' + esc(e.name) + '</div>' : '') +
-    (e.phone ? '<div class="meta" dir="ltr" style="text-align:right"><a data-act="none" href="tel:' + esc(tel) + '" title="اتصال">📞 ' + esc(e.phone) + '</a>' +
-      (wa ? ' &nbsp;·&nbsp; <a data-act="none" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">واتساب</a>' : '') +
-      ' &nbsp;·&nbsp; <a data-act="none" href="tel:' + esc(tel) + '">اتصال هاتفي</a></div>' : '') +
+    (phoneLink ? '<div class="meta" dir="ltr" style="text-align:right">' + phoneLink + '</div>' : '') +
     (e.bank ? '<div class="meta">🏦 <span style="color:#c9c9c9">وصل البنك:</span> ' + esc(e.bank) + '</div>' : '') +
     (e.loc ? '<div class="meta">📍 <a data-act="none" href="' + esc(locUrl) + '" target="_blank" rel="noopener">' + esc(e.loc) + '</a></div>' : '') +
     ((e.paid != null || e.rem != null) ? '<div class="money"><span>المدفوع: <b>' + money(e.paid) + '</b></span><span>المتبقي: <b>' + money(e.rem) + '</b></span></div>' : '') +
@@ -885,14 +897,6 @@ function waNum(p) {
     reasonBox +
     ((isPostponed || isCancelled) ? '<div class="btns" style="margin-top:8px"><button class="btn sm sec" data-act="restore" data-id="' + e.id + '" type="button">♻️ استعادة كحالة عادية</button></div>' : '') +
     '</div>';
-}
-  let dayOpen = null;
-function daySheetHtml(n) {
-  const list = entriesOn(n);
-  return '<div class="shead"><div><h2>' + esc(WD[wday(n)] + ' ' + hStr(n)) + '</h2><div class="sub">' + esc(gStr(n)) + (n === todayN() ? ' · اليوم' : '') +
-    '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
-    '<div id="dlist">' + (list.map(entHtml).join('') || '<div class="empty">لا توجد مناسبات أو مهام في هذا اليوم</div>') + '</div>' +
-    '<div class="btns"><button class="btn" data-act="addDay" data-n="' + n + '">+ إضافة مناسبة / مهمة</button></div>';
 }
 function openDay(n) {
   S.sel = n; render();
@@ -966,23 +970,22 @@ function openMapExternal(location) {
 }
   
   /* ===== نافذة تأجيل المناسبة ===== */
-function openPostponeDialog(entry, parentSheet) {
+  function openPostponeDialog(entry, parentSheet) {
   const today = todayN();
   const originalDate = isoToN(entry.date);
-  // اقتراح تاريخ جديد: بعد أسبوع
   const suggestedDate = isNaN(originalDate) ? today + 7 : originalDate + 7;
   
   const s = openModal(
     '<div class="shead"><div><h2>⏰ تأجيل المناسبة</h2><div class="sub" dir="auto">' + esc(entry.type || 'مناسبة') + (entry.desc ? ' - ' + esc(entry.desc) : '') + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
-    '<div class="hint" style="line-height:1.9">سيتم:</div>' +
+    '<div class="hint" style="line-height:1.9">اختر:</div>' +
     '<ul style="font-size:13.5px;color:#cfcfcf;line-height:1.9;margin:6px 18px 10px 0;padding:0">' +
-    '<li>تعليم المناسبة الحالية بأنها <b style="color:#ff9d6b">مؤجلة</b></li>' +
-    '<li>إنشاء مناسبة جديدة في التاريخ الجديد</li>' +
-    '<li>نسخ كل البيانات (النوع، الوصف، الاسم، الجوال، المبالغ، الملاحظات، الموقع…)</li>' +
+    '<li><b style="color:#ff9d6b">تأجيل بتاريخ جديد</b>: تُعلَّم كمؤجلة وتُنقل إلى تاريخ آخر</li>' +
+    '<li><b style="color:#ff9d6b">تأجيل بدون تاريخ</b>: تُعلَّم كمؤجلة وتبقى في نفس الخلية</li>' +
     '</ul>' +
     '<div id="posterr"></div>' +
-    '<label class="f" for="pdate">التاريخ الجديد <span style="color:#ff9d6b">*</span></label>' +
-    '<input type="date" id="pdate" value="' + iso(suggestedDate) + '" min="' + MIN_ISO + '" max="' + MAX_ISO + '">' +
+    '<label class="f" for="pdate">التاريخ الجديد (اتركه فارغاً إذا لم يُحدَّد بعد)</label>' +
+    '<input type="date" id="pdate" value="" min="' + MIN_ISO + '" max="' + MAX_ISO + '">' +
+    '<div style="margin-top:6px"><button class="btn sm sec" type="button" id="pclear">مسح التاريخ</button></div>' +
     '<div class="hint" id="phij"></div>' +
     '<label class="f" for="preason">سبب التأجيل (اختياري)</label>' +
     '<input type="text" id="preason" maxlength="300" autocomplete="off" placeholder="مثال: ظرف طارئ، عدم توفر القاعة...">' +
@@ -991,33 +994,61 @@ function openPostponeDialog(entry, parentSheet) {
   
   const f = id => $('#' + id, s);
   const hint = () => {
-    const k = isoToN(f('pdate').value);
+    const val = f('pdate').value;
+    if (!val) { f('phij').textContent = '⚠️ سيتم التأجيل بدون تاريخ محدد — ستبقى في نفس الخلية'; f('phij').style.color = '#ff9d6b'; return; }
+    const k = isoToN(val);
     f('phij').textContent = isNaN(k) ? '' : 'الموافق: ' + WD[wday(k)] + ' ' + hStr(k);
+    f('phij').style.color = '#f49426';
   };
   f('pdate').addEventListener('input', hint); hint();
   
+  // زر مسح التاريخ
+  f('pclear').onclick = () => { f('pdate').value = ''; hint(); };
+  
   f('pconfirm').onclick = () => {
-    const newDateN = isoToN(f('pdate').value);
+    const dateVal = f('pdate').value.trim();
+    const reason = f('preason').value.trim();
+    
+    // الحالة 1: بدون تاريخ → فقط علّم كمؤجلة
+    if (!dateVal) {
+      entry.postponed = true;
+      entry.postponedNoDate = true;
+      entry.newDate = '';
+      entry.reason = reason;
+      entry.upd = Date.now();
+      
+      persist();
+      closeModal(s);
+      try { closeModal(parentSheet); } catch (err) { /* ignore */ }
+      render(); refreshDay();
+      try { syncAlarmsToAndroid(); } catch (err) { /* ignore */ }
+      toast('✅ تم تعليم المناسبة كمؤجلة (بدون تاريخ محدد)');
+      return;
+    }
+    
+    // الحالة 2: مع تاريخ جديد
+    const newDateN = isoToN(dateVal);
     if (isNaN(newDateN) || newDateN < MIN_DAY || newDateN > MAX_DAY) {
-      f('posterr').innerHTML = '<div class="err">التاريخ الجديد غير صالح</div>';
+      f('posterr').innerHTML = '<div class="err">التاريخ غير صالح</div>';
       return;
     }
     const newDate = iso(newDateN);
     if (newDate === entry.date) {
-      f('posterr').innerHTML = '<div class="err">التاريخ الجديد مطابق للقديم — اختر تاريخاً مختلفاً</div>';
+      f('posterr').innerHTML = '<div class="err">التاريخ مطابق للقديم — اختر تاريخاً مختلفاً، أو امسح التاريخ للتأجيل بدون تاريخ</div>';
       return;
     }
-    const reason = f('preason').value.trim();
     
-    // 1) علّم المناسبة الأصلية كمؤجلة
+    // علّم الأصل كمؤجلة
     entry.postponed = true;
+    entry.postponedNoDate = false;
     entry.newDate = newDate;
     entry.reason = reason;
     entry.upd = Date.now();
     
-    // 2) أنشئ نسخة جديدة في التاريخ الجديد
+    // أنشئ نسخة جديدة
     const newEntry = Object.assign({}, entry);
     delete newEntry.postponed;
+    delete newEntry.postponedNoDate;
     delete newEntry.newDate;
     delete newEntry.reason;
     newEntry.id = uid();
@@ -1035,8 +1066,8 @@ function openPostponeDialog(entry, parentSheet) {
     toast('✅ تم تأجيل المناسبة إلى ' + newDate);
   };
 }
-
-/* ===== نافذة إلغاء المناسبة ===== */
+  
+  /* ===== نافذة إلغاء المناسبة ===== */
 function openCancelDialog(entry, parentSheet) {
   const s = openModal(
     '<div class="shead"><div><h2>🚫 إلغاء المناسبة</h2><div class="sub" dir="auto">' + esc(entry.type || 'مناسبة') + (entry.desc ? ' - ' + esc(entry.desc) : '') + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
@@ -1102,7 +1133,14 @@ function openRestoreDialog(entry, parentSheet) {
     '<div class="hint">اختر من القائمة، أو أضف نوعًا جديدًا بالأعلى وسيُحفظ تلقائيًا.</div>' +
     '<label class="f" for="fdesc">وصف المناسبة</label><input type="text" id="fdesc" value="' + v(e && e.desc) + '" autocomplete="off" maxlength="200" placeholder="مثال: قاعة الأفراح الكبرى">' +
     '<label class="f" for="fname">اسم صاحب المناسبة / المهمة</label><input type="text" id="fname" value="' + v(e && e.name) + '" autocomplete="off" maxlength="120">' +
-    '<label class="f" for="fphone">رقم جوال صاحب المناسبة / المهمة</label><input type="tel" class="ltr" id="fphone" inputmode="tel" value="' + v(e && e.phone) + '" autocomplete="off" maxlength="24">' +
+    '<label class="f" for="fphone">رقم جوال صاحب المناسبة / المهمة</label>' +
+    '<div class="row2"><input type="tel" class="ltr" id="fphone" inputmode="tel" value="' + v(e && e.phone) + '" autocomplete="off" maxlength="24">' +
+    '<select id="fphonetype">' +
+      '<option value="call"' + (!e || !e.phoneType || e.phoneType === 'call' ? ' selected' : '') + '>📞 اتصال مباشر</option>' +
+      '<option value="whatsapp"' + (e && e.phoneType === 'whatsapp' ? ' selected' : '') + '>💬 واتساب</option>' +
+      '<option value="telegram"' + (e && e.phoneType === 'telegram' ? ' selected' : '') + '>✈️ تيليجرام</option>' +
+      '<option value="other"' + (e && e.phoneType === 'other' ? ' selected' : '') + '>🔗 آخر</option>' +
+    '</select></div>' +
     '<div class="row2"><div><label class="f" for="fpaid">المبلغ المدفوع</label><input type="text" class="ltr" id="fpaid" inputmode="decimal" value="' + v(e && e.paid) + '" autocomplete="off"></div>' +
     '<div><label class="f" for="frem">المبلغ المتبقي</label><input type="text" class="ltr" id="frem" inputmode="decimal" value="' + v(e && e.rem) + '" autocomplete="off"></div></div>' +
     '<label class="f" for="fbank">بيانات وصل البنك (اسم البنك / رقم الوصل)</label><input type="text" id="fbank" value="' + v(e && e.bank) + '" maxlength="200" autocomplete="off">' +
@@ -1198,6 +1236,7 @@ function openRestoreDialog(entry, parentSheet) {
     const notes = f('fnotes').value.trim();
     const desc = f('fdesc').value.trim();
     const phone = norm(f('fphone').value).trim();
+    const phoneType = (f('phonetype') && f('phonetype').value) || 'call';
     const paid = num(f('fpaid').value);
     const rem = num(f('frem').value);
     const bank = f('fbank').value.trim();
@@ -1205,7 +1244,7 @@ function openRestoreDialog(entry, parentSheet) {
     if (!type && !name && !notes) return err('اختر نوعًا أو أدخل الاسم أو الملاحظات على الأقل.');
     if (Number.isNaN(paid) || Number.isNaN(rem)) return err('المبلغ يجب أن يكون رقمًا صحيحًا.');
     if (phone && !/^[+\d\s\-()]{5,24}$/.test(phone)) return err('رقم الجوال غير صالح.');
-    const rec = { date: iso(d), type, name, phone, paid, rem, notes, bank, loc, desc, done: f('fdone').checked };
+    const rec = { date: iso(d), type, name, phone, phoneType, paid, rem, notes, bank, loc, desc, done: f('fdone').checked };
     if (e) {
       Object.assign(e, rec, { upd: Date.now() });
     } else {
@@ -1571,21 +1610,21 @@ function openSearch() {
 }
 
 /* ---------- export / import (Excel 97-2003 .xls) ---------- */
-  const HEAD = ['التاريخ الهجري', 'التاريخ الميلادي', 'نوع المناسبة / المهمة', 'وصف المناسبة', 'اسم صاحب المناسبة / المهمة', 'رقم الجوال', 'المبلغ المدفوع', 'المبلغ المتبقي', 'ملاحظات', 'الحالة', 'وصل البنك', 'الموقع', 'حالة خاصة', 'التاريخ الجديد', 'السبب'];
+  const HEAD = ['التاريخ الهجري', 'التاريخ الميلادي', 'نوع المناسبة / المهمة', 'وصف المناسبة', 'اسم صاحب المناسبة / المهمة', 'رقم الجوال', 'نوع الرقم', 'المبلغ المدفوع', 'المبلغ المتبقي', 'ملاحظات', 'الحالة', 'وصل البنك', 'الموقع', 'حالة خاصة', 'التاريخ الجديد', 'السبب'];
   function doExport() {
   const rows = [HEAD];
   for (const e of sortEntries(S.data.entries)) {
     const n = isoToN(e.date);
-
     const special = e.cancelled ? 'ملغاة' : (e.postponed ? 'مؤجلة' : '');
-    rows.push([hNum(n), e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '', special, e.newDate || '', e.reason || '']);
+    const pt = e.phoneType === 'whatsapp' ? 'واتساب' : (e.phoneType === 'telegram' ? 'تيليجرام' : (e.phoneType === 'other' ? 'آخر' : 'اتصال'));
+    rows.push([hNum(n), e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', pt, e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '', special, e.newDate || '', e.reason || '']);
   }
-  let bytes;
+    let bytes;
   try { bytes = XLSW.write(rows, { sheetName: 'المهام', widths: [14, 14, 22, 26, 16, 14, 14, 40, 12, 22, 30] }); } catch (err) { toast('تعذّر إنشاء ملف إكسل'); return; }
   saveBytes('taqwimi-mahaam-' + iso(todayN()) + '.xls', 'application/vnd.ms-excel', bytes);
   if (!S.data.entries.length) toast('لا توجد بيانات بعد — تم تصدير ملف فارغ بالعناوين فقط');
 }
-  const FIELD_RX = [['hijri', /هجري/], ['greg', /ميلادي/], ['phone', /جوال|هاتف|موبايل|محمول|mobile|phone|tel/], ['paid', /مدفوع|دفع|paid/], ['rem', /متبقي|باقي|remain/],
+  const FIELD_RX = [['hijri', /هجري/], ['greg', /ميلادي/], ['phonetype', /نوع الرقم|نوع الهاتف|phone.?type/], ['phone', /جوال|هاتف|موبايل|محمول|mobile|phone|tel/], ['paid', /مدفوع|دفع|paid/], ['rem', /متبقي|باقي|remain/],
   ['notes', /ملاحظ|note/], ['done', /انجز|حاله|status|done/], ['type', /نوع|type/], ['desc', /وصف|description|desc/], ['name', /اسم|name/], ['date', /تاريخ|date/],
   ['bank', /بنك|وصل|bank|receipt/], ['loc', /موقع|عنوان|location|address|map/]];
   const nrm = s => norm(s).replace(/[\u064B-\u065F\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
@@ -1615,8 +1654,8 @@ function parseAnyDate(v, d1904) {
     });
     if (cnt >= 2) { hr = i; map = m; }
   }
-  if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, paid: 6, rem: 7, notes: 8, done: 9, bank: 10, loc: 11 };
-  const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
+    if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, phonetype: 6, paid: 7, rem: 8, notes: 9, done: 10, bank: 11, loc: 12 };
+    const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
   const txt = v => (v == null ? '' : String(v)).trim();
   for (let r = hr + 1; r < rows.length; r++) {
     const row = rows[r] || []; if (!row.some(x => x !== '' && x != null)) continue;
@@ -1624,10 +1663,15 @@ function parseAnyDate(v, d1904) {
     let n = NaN; for (const k of ['greg', 'hijri', 'date']) if (k in map) { n = parseAnyDate(g(k), res.date1904); if (!isNaN(n)) break; }
     const type = txt(g('type')), desc = txt(g('desc')), name = txt(g('name')), notes = txt(g('notes'));
     const bank = txt(g('bank')), loc = txt(g('loc'));
+    const phonetypeRaw = txt(g('phonetype'));
+    let phoneType = 'call';
+    if (/واتس|whats/i.test(phonetypeRaw)) phoneType = 'whatsapp';
+    else if (/تيليجرام|telegram/i.test(phonetypeRaw)) phoneType = 'telegram';
+    else if (/آخر|other/i.test(phonetypeRaw)) phoneType = 'other';
     if (isNaN(n) || n < MIN_DAY || n > MAX_DAY || (!type && !name && !notes)) { bad++; continue; }
     let phone = txt(g('phone')); if (typeof g('phone') === 'number' && /^5\d{8}$/.test(phone)) phone = '0' + phone;
     const pv = x => { const v = num(x); return (v == null || isNaN(v)) ? null : v; };
-    const e = { id: uid(), ts: Date.now() + ok.length, date: iso(n), type, desc, name, phone: norm(phone), paid: pv(g('paid')), rem: pv(g('rem')), notes, bank, loc, done: isDoneVal(g('done')) };
+    const e = { id: uid(), ts: Date.now() + ok.length, date: iso(n), type, desc, name, phone: norm(phone), phoneType, paid: pv(g('paid')), rem: pv(g('rem')), notes, bank, loc, done: isDoneVal(g('done')) };
     e._dup = exist.has(entKey(e)); if (e._dup) dup++; ok.push(e);
   }
   return { ok, bad, dup };
@@ -1653,8 +1697,86 @@ function handleFile(f) {
   if (f.arrayBuffer) f.arrayBuffer().then(go, () => toast('تعذّر فتح الملف'));
   else { const fr = new FileReader(); fr.onload = () => go(fr.result); fr.onerror = () => toast('تعذّر فتح الملف'); fr.readAsArrayBuffer(f); }
 }
-
-/* ---------- settings ---------- */
+  
+  /* ===== دليل الهاتف ===== */
+function openPhonebook() {
+  // اجمع كل الأسماء الفريدة مع أرقامها
+  const byName = {};
+  for (const e of S.data.entries) {
+    if (!e.name || !e.phone) continue;
+    const key = e.name.trim() + '|' + e.phone.trim();
+    if (!byName[key]) {
+      byName[key] = {
+        name: e.name.trim(),
+        phone: e.phone.trim(),
+        phoneType: e.phoneType || 'call',
+        lastDate: e.date,
+        count: 0
+      };
+    }
+    byName[key].count++;
+    if (e.date > byName[key].lastDate) byName[key].lastDate = e.date;
+    // أول نوع رقم موجود يفوز
+    if (!byName[key].phoneType && e.phoneType) byName[key].phoneType = e.phoneType;
+  }
+  const contacts = Object.values(byName).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  
+  const s = openModal(
+    '<div class="shead"><div><h2>📞 دليل الهاتف</h2><div class="sub">جميع الأسماء وأرقام الاتصال</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
+    '<input type="text" id="pbsearch" placeholder="ابحث بالاسم أو الرقم..." autocomplete="off">' +
+    '<div id="pbcount" class="hint" style="text-align:center;margin-top:6px"></div>' +
+    '<div id="pblist" style="margin-top:10px"></div>',
+    { cls: 'full' }
+  );
+  
+  const draw = () => {
+    const q = norm($('#pbsearch', s).value || '').trim().toLowerCase();
+    const filtered = q ? contacts.filter(c => c.name.toLowerCase().indexOf(q) >= 0 || c.phone.toLowerCase().indexOf(q) >= 0) : contacts;
+    
+    $('#pbcount', s).textContent = 'عدد الأسماء: ' + filtered.length + (q ? ' (من ' + contacts.length + ')' : '');
+    
+    if (!filtered.length) {
+      $('#pblist', s).innerHTML = '<div class="empty">لا توجد أسماء مطابقة</div>';
+      return;
+    }
+    
+    $('#pblist', s).innerHTML = filtered.map(c => {
+      const tel = norm(c.phone).replace(/[^\d+]/g, '');
+      const wa = waNum(c.phone);
+      const phoneType = c.phoneType || 'call';
+      const typeLabel = phoneType === 'whatsapp' ? '💬 واتساب' : (phoneType === 'telegram' ? '✈️ تيليجرام' : (phoneType === 'other' ? '🔗 آخر' : '📞 اتصال'));
+      
+      // تحديد الرابط الأساسي حسب النوع
+      let primaryLink, primaryLabel;
+      if (phoneType === 'whatsapp' && wa) {
+        primaryLink = 'https://wa.me/' + wa;
+        primaryLabel = '💬 واتساب';
+      } else if (phoneType === 'telegram') {
+        primaryLink = 'https://t.me/+' + tel.replace(/^\+/, '');
+        primaryLabel = '✈️ تيليجرام';
+      } else {
+        primaryLink = 'tel:' + tel;
+        primaryLabel = '📞 اتصال';
+      }
+      
+      return '<div class="ent" style="border-inline-start-color:#8e3aa5">' +
+        '<div class="t"><b style="flex:1;font-size:15px">' + esc(c.name) + '</b>' +
+        '<span class="pill" style="background:#5a1a6b">' + esc(typeLabel) + '</span></div>' +
+        '<div class="meta" dir="ltr" style="text-align:right;font-size:15px;color:#fff;margin-top:6px">' + esc(c.phone) + '</div>' +
+        '<div class="meta" style="font-size:12px;color:#a9a9a9">آخر مناسبة: ' + esc(c.lastDate) + ' · عدد المرات: ' + c.count + '</div>' +
+        '<div class="btns" style="margin-top:8px;flex-wrap:wrap;gap:6px">' +
+        '<a class="btn sm" href="' + esc(primaryLink) + '" target="_blank" rel="noopener" data-act="none">' + primaryLabel + '</a>' +
+        '<a class="btn sm sec" href="tel:' + esc(tel) + '" data-act="none">📞 اتصال</a>' +
+        (wa ? '<a class="btn sm sec" href="https://wa.me/' + wa + '" target="_blank" rel="noopener" data-act="none">💬 واتساب</a>' : '') +
+        (tel ? '<a class="btn sm sec" href="https://t.me/+' + esc(tel.replace(/^\+/, '')) + '" target="_blank" rel="noopener" data-act="none">✈️ تيليجرام</a>' : '') +
+        '</div></div>';
+    }).join('');
+  };
+  
+  $('#pbsearch', s).addEventListener('input', draw);
+  draw();
+}
+  /* ---------- settings ---------- */
 function openSettings() {
   const c = S.set.colors, fnt = S.set.fonts || { day: 19, notes: 12, sub: 13 };
   const s = openModal('<div class="shead"><div><h2>الإعدادات</h2><div class="sub" dir="auto">' + esc(S.user.name) + ' · @' + esc(S.user.username) + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
@@ -1946,6 +2068,7 @@ document.addEventListener('click', ev => {
     case 'restore': { const ent = S.data.entries.find(x => x.id === t.dataset.id); if (ent) { const curSheet = t.closest('.sheet'); openRestoreDialog(ent, curSheet);} break;}
     case 'addDay': openForm({ date: +t.dataset.n }); break;
     case 'search': openSearch(); break;
+    case 'phonebook': openPhonebook(); break;
     case 'settings': openSettings(); break;
     case 'export': doExport(); break;
     case 'exportNow': doExport(); break;
