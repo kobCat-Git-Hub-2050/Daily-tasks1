@@ -768,7 +768,14 @@ function render() {
       const pending = list.some(e => !e.done); st = pending ? ' reg' : ' done';
       if (pending && n < today) od = '<span class="od" title="متأخرة"></span>';
       const srt = list.slice().sort((x, y) => (x.ts || 0) - (y.ts || 0));
-      ev = srt.slice(0, 2).map(e => '<div class="ev">' + esc(e.type || e.name || e.notes || '•') + '</div>').join('');
+      ev = srt.slice(0, 2).map(e => {
+        const typeText = e.type || '';
+        const descText = e.desc || '';
+        let line = typeText;
+        if (descText) line = typeText ? (typeText + ' - ' + descText) : descText;
+        if (!line) line = e.name || e.notes || '•';
+        return '<div class="ev">' + esc(line) + '</div>';
+      }).join('');
       if (list.length > 2) ev += '<div class="ev"><i dir="ltr">+' + (list.length - 2) + '</i></div>';
     }
     html += '<div class="cell' + st + (n === today ? ' today' : '') + (n === S.sel ? ' sel' : '') + '" data-act="day" data-n="' + n + '" role="button" tabindex="0" aria-label="' +
@@ -808,6 +815,7 @@ function entHtml(e) {
   return '<div class="ent' + (e.done ? ' done' : '') + '" data-act="edit" data-id="' + e.id + '">' +
     '<div class="t"><button class="tick" data-act="toggle" data-id="' + e.id + '" aria-label="تبديل حالة الإنجاز">✓</button>' +
     '<b>' + esc(e.type || 'بدون نوع') + '</b><span class="pill ' + (e.done ? 'ok' : 'wait') + '">' + (e.done ? 'أنجزت' : 'لم تنجز') + '</span></div>' +
+    (e.desc ? '<div class="meta" style="color:#e0b3ee;font-style:italic">📝 ' + esc(e.desc) + '</div>' : '') +
     (e.name ? '<div class="meta">' + esc(e.name) + '</div>' : '') +
     (e.phone ? '<div class="meta" dir="ltr" style="text-align:right"><a data-act="none" href="tel:' + esc(tel) + '" title="اتصال">📞 ' + esc(e.phone) + '</a>' +
       (wa ? ' &nbsp;·&nbsp; <a data-act="none" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">واتساب</a>' : '') +
@@ -909,6 +917,7 @@ function openForm(opt) {
     '<select id="ftypesel"></select>' +
     '<div class="row2" style="margin-top:6px"><input type="text" id="ftypenew" placeholder="أو اكتب نوعًا جديدًا هنا" maxlength="80" autocomplete="off"><button type="button" class="btn sm" id="ftypeadd" style="flex:none">➕ إضافة</button></div>' +
     '<div class="hint">اختر من القائمة، أو أضف نوعًا جديدًا بالأعلى وسيُحفظ تلقائيًا.</div>' +
+    '<label class="f" for="fdesc">وصف المناسبة</label><input type="text" id="fdesc" value="' + v(e && e.desc) + '" autocomplete="off" maxlength="200" placeholder="مثال: قاعة الأفراح الكبرى">' +
     '<label class="f" for="fname">اسم صاحب المناسبة / المهمة</label><input type="text" id="fname" value="' + v(e && e.name) + '" autocomplete="off" maxlength="120">' +
     '<label class="f" for="fphone">رقم جوال صاحب المناسبة / المهمة</label><input type="tel" class="ltr" id="fphone" inputmode="tel" value="' + v(e && e.phone) + '" autocomplete="off" maxlength="24">' +
     '<div class="row2"><div><label class="f" for="fpaid">المبلغ المدفوع</label><input type="text" class="ltr" id="fpaid" inputmode="decimal" value="' + v(e && e.paid) + '" autocomplete="off"></div>' +
@@ -999,6 +1008,7 @@ function openForm(opt) {
     const type = f('ftypesel').value.trim();
     const name = f('fname').value.trim();
     const notes = f('fnotes').value.trim();
+    const desc = f('fdesc').value.trim();
     const phone = norm(f('fphone').value).trim();
     const paid = num(f('fpaid').value);
     const rem = num(f('frem').value);
@@ -1007,7 +1017,7 @@ function openForm(opt) {
     if (!type && !name && !notes) return err('اختر نوعًا أو أدخل الاسم أو الملاحظات على الأقل.');
     if (Number.isNaN(paid) || Number.isNaN(rem)) return err('المبلغ يجب أن يكون رقمًا صحيحًا.');
     if (phone && !/^[+\d\s\-()]{5,24}$/.test(phone)) return err('رقم الجوال غير صالح.');
-    const rec = { date: iso(d), type, name, phone, paid, rem, notes, bank, loc, done: f('fdone').checked };
+    const rec = { date: iso(d), type, name, phone, paid, rem, notes, bank, loc, desc, done: f('fdone').checked };
     if (e) {
       Object.assign(e, rec, { upd: Date.now() });
     } else {
@@ -1254,6 +1264,7 @@ window.__notifPermission = function(granted) {
     const lines = list.map(e => {
       const parts = [];
       parts.push('<b>' + esc(e.type || 'بدون نوع') + (e.done ? ' ✓' : '') + '</b>');
+      if (e.desc) parts.push('<div class="row"><span>الوصف:</span> ' + esc(e.desc) + '</div>');
       if (e.name) parts.push('<div class="row"><span>الاسم:</span> ' + esc(e.name) + '</div>');
       if (e.phone) parts.push('<div class="row"><span>الجوال:</span> <span dir="ltr">' + esc(e.phone) + '</span></div>');
       if (e.bank) parts.push('<div class="row"><span>وصل البنك:</span> ' + esc(e.bank) + '</div>');
@@ -1345,7 +1356,7 @@ function openSearch() {
     '<div class="chips" id="sf"><button class="chip on" data-f="all">الكل</button><button class="chip" data-f="wait">لم تنجز</button><button class="chip" data-f="ok">أنجزت</button></div><div id="sres"></div>', { cls: 'full' });
   const draw = () => {
     const q = norm($('#sq', s).value).trim().toLowerCase();
-    const list = sortEntries(S.data.entries).filter(e => (f === 'all' || (f === 'ok') === !!e.done) && (!q || [e.type, e.name, e.phone, e.notes, e.bank, e.loc].join(' ').toLowerCase().indexOf(q) >= 0));
+    const list = sortEntries(S.data.entries).filter(e => (f === 'all' || (f === 'ok') === !!e.done) && (!q || [e.type, e.desc, e.name, e.phone, e.notes, e.bank, e.loc].join(' ').toLowerCase().indexOf(q) >= 0));
     let paid = 0, rem = 0; list.forEach(e => { paid += e.paid || 0; rem += e.rem || 0; });
     $('#sres', s).innerHTML = '<div class="tot"><span>العدد: <b>' + list.length + '</b></span><span>المدفوع: <b>' + money(paid) + '</b></span><span>المتبقي: <b>' + money(rem) + '</b></span></div>' +
       (list.slice(0, 300).map(e => { const k = isoToN(e.date); return '<div class="ent' + (e.done ? ' done' : '') + '" data-go="' + k + '"><div class="t"><b>' + esc(e.type || 'بدون نوع') + '</b><span class="pill ' + (e.done ? 'ok' : 'wait') + '">' + (e.done ? 'أنجزت' : 'لم تنجز') + '</span></div><div class="meta">' + esc(hStr(k)) + ' · ' + esc(gStr(k)) + '</div>' +
@@ -1362,22 +1373,22 @@ function openSearch() {
 }
 
 /* ---------- export / import (Excel 97-2003 .xls) ---------- */
-const HEAD = ['التاريخ الهجري', 'التاريخ الميلادي', 'نوع المناسبة / المهمة', 'اسم صاحب المناسبة / المهمة', 'رقم الجوال', 'المبلغ المدفوع', 'المبلغ المتبقي', 'ملاحظات', 'الحالة', 'وصل البنك', 'الموقع'];
-function doExport() {
+  const HEAD = ['التاريخ الهجري', 'التاريخ الميلادي', 'نوع المناسبة / المهمة', 'وصف المناسبة', 'اسم صاحب المناسبة / المهمة', 'رقم الجوال', 'المبلغ المدفوع', 'المبلغ المتبقي', 'ملاحظات', 'الحالة', 'وصل البنك', 'الموقع'];
+  function doExport() {
   const rows = [HEAD];
   for (const e of sortEntries(S.data.entries)) {
     const n = isoToN(e.date);
-    rows.push([hNum(n), e.date, e.type || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '']);
+    rows.push([hNum(n), e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '']);
   }
   let bytes;
   try { bytes = XLSW.write(rows, { sheetName: 'المهام', widths: [14, 14, 22, 26, 16, 14, 14, 40, 12, 22, 30] }); } catch (err) { toast('تعذّر إنشاء ملف إكسل'); return; }
   saveBytes('taqwimi-mahaam-' + iso(todayN()) + '.xls', 'application/vnd.ms-excel', bytes);
   if (!S.data.entries.length) toast('لا توجد بيانات بعد — تم تصدير ملف فارغ بالعناوين فقط');
 }
-const FIELD_RX = [['hijri', /هجري/], ['greg', /ميلادي/], ['phone', /جوال|هاتف|موبايل|محمول|mobile|phone|tel/], ['paid', /مدفوع|دفع|paid/], ['rem', /متبقي|باقي|remain/],
-  ['notes', /ملاحظ|note/], ['done', /انجز|حاله|status|done/], ['type', /نوع|type/], ['name', /اسم|name/], ['date', /تاريخ|date/],
+  const FIELD_RX = [['hijri', /هجري/], ['greg', /ميلادي/], ['phone', /جوال|هاتف|موبايل|محمول|mobile|phone|tel/], ['paid', /مدفوع|دفع|paid/], ['rem', /متبقي|باقي|remain/],
+  ['notes', /ملاحظ|note/], ['done', /انجز|حاله|status|done/], ['type', /نوع|type/], ['desc', /وصف|description|desc/], ['name', /اسم|name/], ['date', /تاريخ|date/],
   ['bank', /بنك|وصل|bank|receipt/], ['loc', /موقع|عنوان|location|address|map/]];
-const nrm = s => norm(s).replace(/[\u064B-\u065F\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+  const nrm = s => norm(s).replace(/[\u064B-\u065F\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
 const isDoneVal = v => /^(انجزت|انجز|منجزه|منجز|تم|نعم|yes|true|done|1|✓|✔)$/.test(nrm(v).trim());
 function parseAnyDate(v, d1904) {
   if (v === '' || v == null) return NaN;
@@ -1391,8 +1402,8 @@ function parseAnyDate(v, d1904) {
   if (y >= 1883 && y <= 2173) { const n = dnum(y, mo, d), p = dparts(n); return (p.m === mo && p.d === d) ? n : NaN; }
   return NaN;
 }
-const entKey = e => [e.date, e.type || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.bank || '', e.loc || ''].join('|');
-function parseImport(res) {
+  const entKey = e => [e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.bank || '', e.loc || ''].join('|');
+  function parseImport(res) {
   const sh = res.sheets.filter(s => !s.hidden && s.rows.length).sort((a, b) => (b.name === 'المهام') - (a.name === 'المهام'))[0];
   if (!sh) return { ok: [], bad: 0, dup: 0 };
   const rows = sh.rows; let hr = -1, map = null;
@@ -1404,19 +1415,19 @@ function parseImport(res) {
     });
     if (cnt >= 2) { hr = i; map = m; }
   }
-  if (!map) map = { hijri: 0, greg: 1, type: 2, name: 3, phone: 4, paid: 5, rem: 6, notes: 7, done: 8, bank: 9, loc: 10 };
+  if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, paid: 6, rem: 7, notes: 8, done: 9, bank: 10, loc: 11 };
   const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
   const txt = v => (v == null ? '' : String(v)).trim();
   for (let r = hr + 1; r < rows.length; r++) {
     const row = rows[r] || []; if (!row.some(x => x !== '' && x != null)) continue;
     const g = k => (k in map ? row[map[k]] : undefined);
     let n = NaN; for (const k of ['greg', 'hijri', 'date']) if (k in map) { n = parseAnyDate(g(k), res.date1904); if (!isNaN(n)) break; }
-    const type = txt(g('type')), name = txt(g('name')), notes = txt(g('notes'));
+    const type = txt(g('type')), desc = txt(g('desc')), name = txt(g('name')), notes = txt(g('notes'));
     const bank = txt(g('bank')), loc = txt(g('loc'));
     if (isNaN(n) || n < MIN_DAY || n > MAX_DAY || (!type && !name && !notes)) { bad++; continue; }
     let phone = txt(g('phone')); if (typeof g('phone') === 'number' && /^5\d{8}$/.test(phone)) phone = '0' + phone;
     const pv = x => { const v = num(x); return (v == null || isNaN(v)) ? null : v; };
-    const e = { id: uid(), ts: Date.now() + ok.length, date: iso(n), type, name, phone: norm(phone), paid: pv(g('paid')), rem: pv(g('rem')), notes, bank, loc, done: isDoneVal(g('done')) };
+    const e = { id: uid(), ts: Date.now() + ok.length, date: iso(n), type, desc, name, phone: norm(phone), paid: pv(g('paid')), rem: pv(g('rem')), notes, bank, loc, done: isDoneVal(g('done')) };
     e._dup = exist.has(entKey(e)); if (e._dup) dup++; ok.push(e);
   }
   return { ok, bad, dup };
