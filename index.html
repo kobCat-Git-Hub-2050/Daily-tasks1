@@ -1615,16 +1615,19 @@ function openSearch() {
     const n = isoToN(e.date);
     const special = e.cancelled ? 'ملغاة' : (e.postponed ? 'مؤجلة' : '');
     const pt = e.phoneType === 'whatsapp' ? 'واتساب' : (e.phoneType === 'telegram' ? 'تيليجرام' : (e.phoneType === 'other' ? 'آخر' : 'اتصال'));
-    rows.push([hNum(n), e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', pt, e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '', special, e.newDate || '', e.reason || '']);
+    // التاريخ الجديد: يجب أن يكون بصيغة ISO لسهولة الاستيراد
+    const newDateISO = e.newDate ? (isoToN(e.newDate) ? e.newDate : '') : '';
+    rows.push([hNum(n), e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', pt, e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.done ? 'أنجزت' : 'لم تنجز', e.bank || '', e.loc || '', special, newDateISO, e.reason || '']);
   }
-    let bytes;
-  try { bytes = XLSW.write(rows, { sheetName: 'المهام', widths: [14, 14, 22, 26, 16, 14, 14, 40, 12, 22, 30] }); } catch (err) { toast('تعذّر إنشاء ملف إكسل'); return; }
+  let bytes;
+  try { bytes = XLSW.write(rows, { sheetName: 'المهام', widths: [14, 14, 22, 26, 16, 14, 14, 40, 12, 22, 30, 18, 14, 20] }); } catch (err) { toast('تعذّر إنشاء ملف إكسل'); return; }
   saveBytes('taqwimi-mahaam-' + iso(todayN()) + '.xls', 'application/vnd.ms-excel', bytes);
   if (!S.data.entries.length) toast('لا توجد بيانات بعد — تم تصدير ملف فارغ بالعناوين فقط');
 }
   const FIELD_RX = [['hijri', /هجري/], ['greg', /ميلادي/], ['phonetype', /نوع الرقم|نوع الهاتف|phone.?type/], ['phone', /جوال|هاتف|موبايل|محمول|mobile|phone|tel/], ['paid', /مدفوع|دفع|paid/], ['rem', /متبقي|باقي|remain/],
   ['notes', /ملاحظ|note/], ['done', /انجز|حاله|status|done/], ['type', /نوع|type/], ['desc', /وصف|description|desc/], ['name', /اسم|name/], ['date', /تاريخ|date/],
-  ['bank', /بنك|وصل|bank|receipt/], ['loc', /موقع|عنوان|location|address|map/]];
+  ['bank', /بنك|وصل|bank|receipt/], ['loc', /موقع|عنوان|location|address|map/],
+  ['special', /حالة خاصة|حاله خاصه|special/], ['newdate', /التاريخ الجديد|تاريخ جديد|new.?date/], ['reason', /السبب|سبب|reason/]];
   const nrm = s => norm(s).replace(/[\u064B-\u065F\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
 const isDoneVal = v => /^(انجزت|انجز|منجزه|منجز|تم|نعم|yes|true|done|1|✓|✔)$/.test(nrm(v).trim());
 function parseAnyDate(v, d1904) {
@@ -1639,7 +1642,7 @@ function parseAnyDate(v, d1904) {
   if (y >= 1883 && y <= 2173) { const n = dnum(y, mo, d), p = dparts(n); return (p.m === mo && p.d === d) ? n : NaN; }
   return NaN;
 }
-  const entKey = e => [e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.bank || '', e.loc || ''].join('|');
+  const entKey = e => [e.date, e.type || '', e.desc || '', e.name || '', e.phone || '', e.paid == null ? '' : e.paid, e.rem == null ? '' : e.rem, e.notes || '', e.bank || '', e.loc || '', e.postponed ? '1' : '0', e.cancelled ? '1' : '0', e.newDate || '', e.reason || ''].join('|');
   function parseImport(res) {
   const sh = res.sheets.filter(s => !s.hidden && s.rows.length).sort((a, b) => (b.name === 'المهام') - (a.name === 'المهام'))[0];
   if (!sh) return { ok: [], bad: 0, dup: 0 };
@@ -1652,7 +1655,7 @@ function parseAnyDate(v, d1904) {
     });
     if (cnt >= 2) { hr = i; map = m; }
   }
-  if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, phonetype: 6, paid: 7, rem: 8, notes: 9, done: 10, bank: 11, loc: 12 };
+  if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, phonetype: 6, paid: 7, rem: 8, notes: 9, done: 10, bank: 11, loc: 12, special: 13, newdate: 14, reason: 15 };
   const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
   const txt = v => (v == null ? '' : String(v)).trim();
   for (let r = hr + 1; r < rows.length; r++) {
@@ -1666,9 +1669,26 @@ function parseAnyDate(v, d1904) {
     if (/واتس|whats/i.test(phonetypeRaw)) phoneType = 'whatsapp';
     else if (/تيليجرام|telegram/i.test(phonetypeRaw)) phoneType = 'telegram';
     else if (/آخر|other/i.test(phonetypeRaw)) phoneType = 'other';
+    // قراءة الحالة الخاصة (مؤجلة/ملغاة)
+    const specialRaw = nrm(txt(g('special')));
+    const isCancelled = /ملغا|ملغى|cancel/i.test(specialRaw);
+    const isPostponed = !isCancelled && /مؤجل|مؤجله|مؤجّل|postpon|delay/i.test(specialRaw);
+    const newDateRaw = txt(g('newdate'));
+    const reason = txt(g('reason'));
     if (isNaN(n) || n < MIN_DAY || n > MAX_DAY || (!type && !name && !notes)) { bad++; continue; }
     let phone = txt(g('phone')); if (typeof g('phone') === 'number' && /^5\d{8}$/.test(phone)) phone = '0' + phone;
     const pv = x => { const v = num(x); return (v == null || isNaN(v)) ? null : v; };
+    // معالجة التاريخ الجديد
+    let newDate = '';
+    if (isPostponed && newDateRaw) {
+      // قد يكون التاريخ الجديد بصيغة ISO أو بصيغة أخرى — نحوله إلى ISO
+      const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(newDateRaw);
+      if (isoMatch) newDate = newDateRaw;
+      else {
+        const n2 = parseAnyDate(newDateRaw, res.date1904);
+        if (!isNaN(n2) && n2 >= MIN_DAY && n2 <= MAX_DAY) newDate = iso(n2);
+      }
+    }
     const e = {
       id: uid(),
       ts: Date.now() + ok.length,
@@ -1684,10 +1704,10 @@ function parseAnyDate(v, d1904) {
       bank: bank || '',
       loc: loc || '',
       done: isDoneVal(g('done')),
-      postponed: false,
-      cancelled: false,
-      newDate: '',
-      reason: ''
+      postponed: isPostponed,
+      cancelled: isCancelled,
+      newDate: newDate,
+      reason: reason
     };
     e._dup = exist.has(entKey(e)); if (e._dup) dup++; ok.push(e);
   }
