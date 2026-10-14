@@ -869,38 +869,33 @@ function allTypesIncludingBlocked() {
 }
 
 function typeList() { return allTypes(); }
-
-  /* فتح موقع في خرائط جوجل — يدعم المتصفح و APK */
-function openMapsExternal(location) {
+  
+/* فتح موقع في خرائط جوجل — يدعم APK والمتصفح */
+function openMapExternal(location) {
   if (!location) return;
   const isUrl = /^https?:\/\//i.test(location);
   const isGeo = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(location);
   
-  // في APK: استخدم الجسر الأصلي لفتح تطبيق Google Maps
+  // في APK: استخدم الجسر الأصلي
   if (window.AndroidBridge && window.AndroidBridge.openMaps) {
     try {
-      // إذا كان رابط http، مرره كما هو
-      // إذا كان نص عنوان، مرره كنص وسيتولى Android تحويله إلى geo:
       window.AndroidBridge.openMaps(location);
       return;
-    } catch (e) { /* fall through */ }
+    } catch (e) { /* fall through to browser */ }
   }
   
-  // في المتصفح: افتح في نافذة جديدة
+  // في المتصفح
   let url;
   if (isUrl) {
     url = location;
   } else if (isGeo) {
-    url = 'https://maps.google.com/?q=' + encodeURIComponent(location);
+    url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location);
   } else {
-    // نص عنوان
     url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location);
   }
   window.open(url, '_blank');
-} 
-
-
-
+}
+  
 function openForm(opt) {
   const e = opt.id ? S.data.entries.find(x => x.id === opt.id) : null;
   if (opt.id && !e) return;
@@ -919,16 +914,22 @@ function openForm(opt) {
     '<div class="row2"><div><label class="f" for="fpaid">المبلغ المدفوع</label><input type="text" class="ltr" id="fpaid" inputmode="decimal" value="' + v(e && e.paid) + '" autocomplete="off"></div>' +
     '<div><label class="f" for="frem">المبلغ المتبقي</label><input type="text" class="ltr" id="frem" inputmode="decimal" value="' + v(e && e.rem) + '" autocomplete="off"></div></div>' +
     '<label class="f" for="fbank">بيانات وصل البنك (اسم البنك / رقم الوصل)</label><input type="text" id="fbank" value="' + v(e && e.bank) + '" maxlength="200" autocomplete="off">' +
-    '<label class="f" for="floc">موقع المناسبة (اكتب اسم المكان مثل: فندق هيلتون الرياض)</label>' +
-    '<input type="text" id="floc" value="' + v(e && e.loc) + '" maxlength="500" autocomplete="off" placeholder="مثال: فندق هيلتون الرياض">' +
-    '<div class="btns" style="margin-top:8px"><button class="btn sm sec" id="fmapopen" type="button">🗺️ فتح الموقع في خرائط جوجل</button></div>' +
+    '<label class="f" for="floc">موقع المناسبة (الصق رابط Google Maps أو اكتب اسم المكان)</label>' +
+    '<input type="text" class="ltr" id="floc" value="' + v(e && e.loc) + '" maxlength="500" autocomplete="off" placeholder="https://maps.app.goo.gl/... أو فندق هيلتون الرياض">' +
+    '<div class="btns" style="margin-top:8px;flex-wrap:wrap;gap:6px">' +
+    '<button class="btn sm" id="fmapopen" type="button">🗺️ فتح خرائط جوجل للبحث</button>' +
+    '<button class="btn sm sec" id="fmaptest" type="button">✅ اختبار الرابط</button>' +
+    '</div>' +
+    '<div class="hint">لنسخ الرابط من Google Maps: افتح الموقع ← مشاركة ← نسخ الرابط ← الصقه هنا.</div>' +
     '<label class="f" for="fnotes">ملاحظات</label><textarea id="fnotes" maxlength="3000">' + v(e && e.notes) + '</textarea>' +
     '<label class="sw"><span>المناسبة / المهمة أنجزت</span><input type="checkbox" id="fdone"' + (e && e.done ? ' checked' : '') + '><span class="tg"></span></label>' +
-    '<div class="btns"><button class="btn" id="fsave">حفظ</button><button class="btn sec" data-act="close">إلغاء</button>' + (e ? '<button class="btn danger" id="fdel">حذف</button>' : '') + '</div>', { lock: true });
+    '<div class="btns"><button class="btn" id="fsave">💾 حفظ</button><button class="btn sec" data-act="close">إلغاء</button>' + (e ? '<button class="btn danger" id="fdel">حذف</button>' : '') + '</div>', { lock: true });
+  
+  // ---- helpers ----
   const f = id => $('#' + id, sheet);
   const hint = () => { const k = isoToN(f('fdate').value); f('fhij').textContent = isNaN(k) ? '' : 'الموافق: ' + WD[wday(k)] + ' ' + hStr(k); };
   
-  // قائمة الأنواع المنسدلة
+  // ---- types dropdown ----
   const fillTypes = (selected) => {
     const arr = allTypes();
     if (selected && !arr.includes(selected)) arr.unshift(selected);
@@ -936,9 +937,10 @@ function openForm(opt) {
       arr.map(t => '<option value="' + esc(t) + '"' + (t === selected ? ' selected' : '') + '>' + esc(t) + '</option>').join('');
   };
   fillTypes(e && e.type ? e.type : '');
-  f('fdate').addEventListener('input', hint); hint();
+  f('fdate').addEventListener('input', hint);
+  hint();
   
-  // إضافة نوع جديد
+  // ---- add new type ----
   f('ftypeadd').onclick = () => {
     const nv = f('ftypenew').value.trim();
     if (!nv) return toast('اكتب اسم النوع أولاً');
@@ -948,63 +950,93 @@ function openForm(opt) {
     f('ftypenew').value = '';
     fillTypes(nv);
   };
-  f('ftypenew').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); f('ftypeadd').click(); } });
+  f('ftypenew').addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); f('ftypeadd').click(); }
+  });
   
-  // فتح الموقع في خرائط جوجل
+  // ---- open Google Maps for search ----
   f('fmapopen').onclick = () => {
-    const u = f('floc').value.trim();
-    if (!u) return toast('اكتب اسم الموقع أولاً أو الصق رابطًا');
-    // إذا كان رابط → افتحه مباشرة
-    if (/^https?:\/\//i.test(u)) {
-      if (window.AndroidBridge && window.AndroidBridge.openMaps) {
-        window.AndroidBridge.openMaps(u);
-      } else {
-        window.open(u, '_blank');
-      }
+    const current = f('floc').value.trim();
+    // إذا كان هناك رابط أو نص، افتحه مباشرة
+    if (current) {
+      openMapExternal(current);
       return;
     }
-    // إذا كان إحداثيات
-    if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(u)) {
-      const url = 'https://maps.google.com/?q=' + encodeURIComponent(u);
-      if (window.AndroidBridge && window.AndroidBridge.openMaps) {
-        window.AndroidBridge.openMaps(url);
-      } else {
-        window.open(url, '_blank');
-      }
-      return;
-    }
-    // نص عنوان → ابحث عنه
-    const url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(u);
-    if (window.AndroidBridge && window.AndroidBridge.openMaps) {
-      window.AndroidBridge.openMaps(u);
-    } else {
-      window.open(url, '_blank');
+    // اطلب اسم المكان
+    const place = prompt('اكتب اسم المكان للبحث في خرائط جوجل:', '');
+    if (place && place.trim()) {
+      f('floc').value = place.trim();
+      openMapExternal(place.trim());
     }
   };
   
-  // حفظ السجل
+  // ---- test link ----
+  f('fmaptest').onclick = () => {
+    const u = f('floc').value.trim();
+    if (!u) return toast('⚠️ لا يوجد رابط أو اسم مكان');
+    if (/^https?:\/\//i.test(u)) {
+      if (/google\.com\/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(u)) {
+        toast('✅ الرابط صحيح — سيُفتح في خرائط جوجل');
+        openMapExternal(u);
+      } else {
+        toast('⚠️ هذا الرابط ليس من خرائط جوجل. سيُفتح في المتصفح');
+        openMapExternal(u);
+      }
+    } else if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(u)) {
+      toast('✅ إحداثيات صحيحة');
+      openMapExternal(u);
+    } else {
+      toast('ℹ️ نص عنوان — سيُبحث عنه في خرائط جوجل');
+      openMapExternal(u);
+    }
+  };
+  
+  // ---- save ----
   f('fsave').onclick = () => {
     const err = m => { f('ferr').innerHTML = '<div class="err">' + esc(m) + '</div>'; f('ferr').scrollIntoView({ block: 'nearest' }); };
     const d = isoToN(f('fdate').value);
     if (isNaN(d) || d < MIN_DAY || d > MAX_DAY) return err('التاريخ غير صالح أو خارج النطاق المدعوم (1300 – 1600هـ).');
     const type = f('ftypesel').value.trim();
-    const name = f('fname').value.trim(), notes = f('fnotes').value.trim(), phone = norm(f('fphone').value).trim();
-    const paid = num(f('fpaid').value), rem = num(f('frem').value);
-    const bank = f('bank').value.trim(), loc = f('loc').value.trim();
+    const name = f('fname').value.trim();
+    const notes = f('fnotes').value.trim();
+    const phone = norm(f('fphone').value).trim();
+    const paid = num(f('fpaid').value);
+    const rem = num(f('frem').value);
+    const bank = f('fbank').value.trim();
+    const loc = f('floc').value.trim();
     if (!type && !name && !notes) return err('اختر نوعًا أو أدخل الاسم أو الملاحظات على الأقل.');
     if (Number.isNaN(paid) || Number.isNaN(rem)) return err('المبلغ يجب أن يكون رقمًا صحيحًا.');
     if (phone && !/^[+\d\s\-()]{5,24}$/.test(phone)) return err('رقم الجوال غير صالح.');
     const rec = { date: iso(d), type, name, phone, paid, rem, notes, bank, loc, done: f('fdone').checked };
-    if (e) Object.assign(e, rec, { upd: Date.now() }); else S.data.entries.push(Object.assign({ id: uid(), ts: Date.now() }, rec));
+    if (e) {
+      Object.assign(e, rec, { upd: Date.now() });
+    } else {
+      S.data.entries.push(Object.assign({ id: uid(), ts: Date.now() }, rec));
+    }
     if (type) {
       const ct = customTypes();
       if (!ct.includes(type) && !DEF_TYPES.includes(type)) ct.push(type);
     }
-    persist(); closeModal(sheet); S.sel = d; render(); refreshDay(); syncAlarmsToAndroid(); toast('تم الحفظ');
+    persist();
+    closeModal(sheet);
+    S.sel = d;
+    render();
+    refreshDay();
+    try { syncAlarmsToAndroid(); } catch (err) { /* ignore */ }
+    toast('✅ تم الحفظ');
   };
-  if (e) f('fdel').onclick = () => confirmDlg('حذف هذا السجل نهائيًا؟', () => {
-    S.data.entries = S.data.entries.filter(x => x.id !== e.id); persist(); closeModal(sheet); render(); refreshDay(); syncAlarmsToAndroid(); toast('تم الحذف');
-  }, 'حذف');
+  
+  // ---- delete ----
+  if (e) {
+    f('fdel').onclick = () => confirmDlg('حذف هذا السجل نهائيًا؟', () => {
+      S.data.entries = S.data.entries.filter(x => x.id !== e.id);
+      persist(); closeModal(sheet); render(); refreshDay();
+      try { syncAlarmsToAndroid(); } catch (err) { /* ignore */ }
+      toast('تم الحذف');
+    }, 'حذف');
+  }
+  
+  // ---- focus ----
   setTimeout(() => { if (!e) f('ftypesel').focus(); }, 60);
 }
   
