@@ -723,9 +723,9 @@ const hStr = n => { const h = hij(n, S.set.off); return h.d + ' ' + HM[h.m - 1] 
 const gStr = n => { const p = dparts(n); return p.d + ' ' + GM[p.m - 1] + ' ' + p.y + 'م'; };
 const hNum = n => { const h = hij(n, S.set.off); return h.y + '/' + p2(h.m) + '/' + p2(h.d); };
 const sortEntries = a => a.slice().sort((x, y) => x.date < y.date ? -1 : x.date > y.date ? 1 : (x.ts || 0) - (y.ts || 0));
-function entriesOn(n) { const k = iso(n); return sortEntries(S.data.entries.filter(e => e.date === k)); }
-
-/* ---------- modal manager ---------- */
+  function entriesOn(n) { const k = iso(n); return sortEntries(S.data.entries.filter(e => e && e.date === k));}
+  
+  /* ---------- modal manager ---------- */
 const stack = [];
 function openModal(html, o) {
   o = o || {};
@@ -840,8 +840,11 @@ function waNum(p) {
   if (d.startsWith('00')) d = d.slice(2); else if (d.length === 10 && d.startsWith('05')) d = '966' + d.slice(1); else if (d.length === 9 && d.startsWith('5')) d = '966' + d;
   return d;
 }
+  
   function entHtml(e) {
-  const tel = norm(e.phone).replace(/[^\d+]/g, ''), wa = waNum(e.phone);
+  e = e || {};
+  const tel = norm(e.phone || '').replace(/[^\d+]/g, '');
+  const wa = e.phone ? waNum(e.phone) : '';
   const locUrl = e.loc ? (/^https?:\/\//i.test(e.loc) ? e.loc : 'https://maps.google.com/?q=' + encodeURIComponent(e.loc)) : '';
   
   const isPostponed = !!e.postponed;
@@ -860,6 +863,31 @@ function waNum(p) {
     if (e.reason) parts.push('<div>السبب: ' + esc(e.reason) + '</div>');
     if (parts.length) reasonBox = '<div class="reason-box">' + parts.join('') + '</div>';
   }
+  
+  const phoneType = e.phoneType || 'call';
+  const phoneLabel = phoneType === 'whatsapp' ? 'واتساب' : (phoneType === 'telegram' ? 'تيليجرام' : (phoneType === 'other' ? 'آخر' : 'اتصال'));
+  let phoneLink = '';
+  if (e.phone) {
+    if (phoneType === 'whatsapp') phoneLink = 'https://wa.me/' + wa;
+    else if (phoneType === 'telegram') phoneLink = 'https://t.me/+' + tel.replace(/^\+/, '');
+    else phoneLink = 'tel:' + tel;
+    phoneLink = '<a data-act="none" href="' + esc(phoneLink) + '" target="_blank" rel="noopener" title="' + phoneLabel + '">📞 ' + esc(e.phone) + ' (' + phoneLabel + ')</a>';
+  }
+  
+  return '<div class="ent' + (e.done ? ' done' : '') + extraClass + '" data-act="edit" data-id="' + esc(e.id || '') + '">' +
+    '<div class="t"><button class="tick" data-act="toggle" data-id="' + esc(e.id || '') + '" aria-label="تبديل حالة الإنجاز">✓</button>' +
+    '<b>' + esc(e.type || 'بدون نوع') + '</b>' + badge + '<span class="pill ' + (e.done ? 'ok' : 'wait') + '">' + (e.done ? 'أنجزت' : 'لم تنجز') + '</span></div>' +
+    (e.desc ? '<div class="meta" style="color:#e0b3ee;font-style:italic">📝 ' + esc(e.desc) + '</div>' : '') +
+    (e.name ? '<div class="meta">' + esc(e.name) + '</div>' : '') +
+    (phoneLink ? '<div class="meta" dir="ltr" style="text-align:right">' + phoneLink + '</div>' : '') +
+    (e.bank ? '<div class="meta">🏦 <span style="color:#c9c9c9">وصل البنك:</span> ' + esc(e.bank) + '</div>' : '') +
+    (e.loc ? '<div class="meta">📍 <a data-act="none" href="' + esc(locUrl) + '" target="_blank" rel="noopener">' + esc(e.loc) + '</a></div>' : '') +
+    ((e.paid != null || e.rem != null) ? '<div class="money"><span>المدفوع: <b>' + money(e.paid) + '</b></span><span>المتبقي: <b>' + money(e.rem) + '</b></span></div>' : '') +
+    (e.notes ? '<div class="note">' + esc(e.notes) + '</div>' : '') +
+    reasonBox +
+    ((isPostponed || isCancelled) ? '<div class="btns" style="margin-top:8px"><button class="btn sm sec" data-act="restore" data-id="' + esc(e.id || '') + '" type="button">♻️ استعادة كحالة عادية</button></div>' : '') +
+    '</div>';
+}
   
   // نوع الرقم والرابط المناسب
   const phoneType = e.phoneType || 'call';
@@ -1642,8 +1670,8 @@ function parseAnyDate(v, d1904) {
     });
     if (cnt >= 2) { hr = i; map = m; }
   }
-    if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, phonetype: 6, paid: 7, rem: 8, notes: 9, done: 10, bank: 11, loc: 12 };
-    const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
+  if (!map) map = { hijri: 0, greg: 1, type: 2, desc: 3, name: 4, phone: 5, phonetype: 6, paid: 7, rem: 8, notes: 9, done: 10, bank: 11, loc: 12 };
+  const exist = new Set(S.data.entries.map(entKey)), ok = []; let bad = 0, dup = 0;
   const txt = v => (v == null ? '' : String(v)).trim();
   for (let r = hr + 1; r < rows.length; r++) {
     const row = rows[r] || []; if (!row.some(x => x !== '' && x != null)) continue;
@@ -1659,12 +1687,37 @@ function parseAnyDate(v, d1904) {
     if (isNaN(n) || n < MIN_DAY || n > MAX_DAY || (!type && !name && !notes)) { bad++; continue; }
     let phone = txt(g('phone')); if (typeof g('phone') === 'number' && /^5\d{8}$/.test(phone)) phone = '0' + phone;
     const pv = x => { const v = num(x); return (v == null || isNaN(v)) ? null : v; };
-    const e = { id: uid(), ts: Date.now() + ok.length, date: iso(n), type, desc, name, phone: norm(phone), phoneType, paid: pv(g('paid')), rem: pv(g('rem')), notes, bank, loc, done: isDoneVal(g('done')) };
+    const e = {
+      id: uid(),
+      ts: Date.now() + ok.length,
+      date: iso(n),
+      type: type || '',
+      desc: desc || '',
+      name: name || '',
+      phone: norm(phone) || '',
+      phoneType: phoneType || 'call',
+      paid: pv(g('paid')),
+      rem: pv(g('rem')),
+      notes: notes || '',
+      bank: bank || '',
+      loc: loc || '',
+      done: isDoneVal(g('done')),
+      postponed: false,
+      cancelled: false,
+      newDate: '',
+      reason: ''
+    };
     e._dup = exist.has(entKey(e)); if (e._dup) dup++; ok.push(e);
+  }
+  // تأكد من أن كل سجل له id فريد
+  const seenIds = new Set(S.data.entries.map(x => x.id));
+  for (const e of ok) {
+    if (!e.id || seenIds.has(e.id)) e.id = uid();
+    seenIds.add(e.id);
   }
   return { ok, bad, dup };
 }
-function importPreview(r, fname) {
+  function importPreview(r, fname) {
   const fresh = r.ok.filter(e => !e._dup);
   const s = openModal('<div class="shead"><div><h2>استيراد من Excel</h2><div class="sub" dir="auto">' + esc(fname) + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
     '<div class="tot"><span>صفوف صالحة: <b>' + r.ok.length + '</b></span><span>مكررة: <b>' + r.dup + '</b></span><span>غير صالحة: <b>' + r.bad + '</b></span></div>' +
@@ -1764,8 +1817,9 @@ function openPhonebook() {
   $('#pbsearch', s).addEventListener('input', draw);
   draw();
 }
+  
   /* ---------- settings ---------- */
-function openSettings() {
+  function openSettings() {
   const c = S.set.colors, fnt = S.set.fonts || { day: 19, notes: 12, sub: 13 };
   const s = openModal('<div class="shead"><div><h2>الإعدادات</h2><div class="sub" dir="auto">' + esc(S.user.name) + ' · @' + esc(S.user.username) + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
     '<div class="sec-t">التقويم</div><label class="f">تعديل التاريخ الهجري (زيادة / إنقاص أيام)</label>' +
@@ -1784,6 +1838,7 @@ function openSettings() {
     '<div id="nstatus" class="hint" style="text-align:center;margin-top:8px"></div>' +
     '<div class="sec-t">البيانات</div><div class="btns" style="margin-top:6px"><button class="btn sec" id="sx">تصدير إلى Excel 97-2003</button><button class="btn sec" id="si">استيراد من Excel 97-2003</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn sec" id="stypes">🏷️ إدارة أنواع المناسبات</button></div>' +
+    '<div class="btns" style="margin-top:8px"><button class="btn sec" id="sfix">🔧 إصلاح البيانات المستوردة</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn danger" id="sd">حذف كل البيانات</button></div>' +
     '<div class="sec-t">الحساب والأمان</div><div class="btns" style="margin-top:6px"><button class="btn sec" id="sp">تغيير الرقم السري</button><button class="btn sec" id="spw">تغيير كلمة المرور</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn ghost" id="sl">قفل التطبيق الآن</button><button class="btn ghost" id="slo">تسجيل الخروج</button></div>' +
@@ -1859,6 +1914,29 @@ function openSettings() {
   $('#sx', s).onclick = doExport;
   $('#si', s).onclick = () => $('#file').click();
   $('#stypes', s).onclick = openTypesManager;
+  $('#sfix', s).onclick = () => {
+    let fixed = 0;
+    const seenIds = new Set();
+    for (const e of S.data.entries) {
+      if (!e) continue;
+      if (!e.id || seenIds.has(e.id)) { e.id = uid(); fixed++; }
+      seenIds.add(e.id);
+      if (e.desc === undefined) e.desc = '';
+      if (e.notes === undefined) e.notes = '';
+      if (e.bank === undefined) e.bank = '';
+      if (e.loc === undefined) e.loc = '';
+      if (e.phoneType === undefined) e.phoneType = 'call';
+      if (e.phone === undefined) e.phone = '';
+      if (e.type === undefined) e.type = '';
+      if (e.name === undefined) e.name = '';
+      if (e.date === undefined) e.date = iso(todayN());
+      if (e.postponed === undefined) e.postponed = false;
+      if (e.cancelled === undefined) e.cancelled = false;
+    }
+    persist();
+    render();
+    toast('✅ تم إصلاح ' + fixed + ' سجل (وتم التحقق من الباقي)');
+  };
   $('#sd', s).onclick = () => confirmDlg('سيتم حذف جميع المناسبات والمهام المسجلة في هذا الحساب نهائيًا. يُنصح بتصديرها إلى Excel أولًا. هل تريد المتابعة؟', () => { S.data.entries = []; persist(); render(); toast('تم حذف كل البيانات'); }, 'حذف الكل');
   $('#sp', s).onclick = () => openPinForm({});
   $('#spw', s).onclick = () => openPwForm();
@@ -1873,7 +1951,6 @@ function openSettings() {
     }
     window.open('mailto:' + DESIGNER.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   };
-  // عرض حالة التنبيهات
   const updateNotifStatus = () => {
     const el = $('#nstatus', s);
     if (!el) return;
@@ -1895,8 +1972,8 @@ function openSettings() {
   updateNotifStatus();
   pv();
 }
-
-/* ---------- account: PIN / password ---------- */
+  
+  /* ---------- account: PIN / password ---------- */
 function updateUser(patch) {
   const us = users(), i = us.findIndex(x => x.id === S.user.id); if (i < 0) return false;
   Object.assign(us[i], patch); Object.assign(S.user, patch); return saveUsers(us);
