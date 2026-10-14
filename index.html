@@ -1954,16 +1954,34 @@ function removeOverlay() { const o = $('#auth'); if (o) o.remove(); }
 const aerr = (el, m) => { $('#aerr', el).innerHTML = '<div class="err">' + esc(m) + '</div>'; };
 
 const needWarn = () => !window.AndroidBridge && !LS.get('tm.nowarn') && (location.protocol === 'file:' || /^(localhost|\[.*\]|\d{1,3}(\.\d{1,3}){3})$/.test(location.hostname));
-function enter(u, after) {
-  S.user = u; S.data = normData(LS.get('tm.d.' + u.id)); S.set = S.data.set; S.sel = null; dayOpen = null;
-  SS.set('tm.s', u.id); LS.set('tm.last', u.id);
-  removeOverlay(); $('#app').classList.remove('hide'); applyColors(); S.view = viewFor(todayN()); render();
-  $('#warn').classList.toggle('hide', !needWarn());
-  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }
-  if (after) after();
-  setTimeout(() => { try { checkNotifications(); } catch (e) { /* ignore */ } }, 1500);
+  function enter(u, after) {
+  try {
+    S.user = u;
+    const stored = LS.get('tm.d.' + u.id);
+    S.data = normData(stored || {});
+    S.set = S.data.set;
+    S.sel = null;
+    dayOpen = null;
+    SS.set('tm.s', u.id);
+    LS.set('tm.last', u.id);
+    removeOverlay();
+    $('#app').classList.remove('hide');
+    applyColors();
+    S.view = viewFor(todayN());
+    render();
+    $('#warn').classList.toggle('hide', !needWarn());
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }
+    if (after) after();
+    setTimeout(() => { try { checkNotifications(); } catch (e) { /* ignore */ } }, 1500);
+  } catch (err) {
+    // في حال فشل فتح التطبيق، أظهر رسالة واضحة
+    console.error('Enter failed:', err);
+    alert('حدث خطأ أثناء فتح التطبيق: ' + (err && err.message ? err.message : 'خطأ غير معروف') + '\n\nسيتم محاولة إعادة التعيين.');
+    try { LS.del('tm.d.' + u.id); } catch (e) {}
+    location.reload();
+  }
 }
-function lockNow(logout) {
+  function lockNow(logout) {
   closeAll(); toggleMenu(false);
   const u = S.user; S.user = null; S.data = null; S.set = null; dayOpen = null;
   SS.del('tm.s'); $('#grid').innerHTML = '';
@@ -1977,11 +1995,25 @@ function showRegister(first) {
     '<label for="rp2">تأكيد كلمة المرور</label><input type="password" id="rp2" autocomplete="new-password">' +
     '<label for="rpin">الرقم السري للدخول إلى التطبيق (4 – 8 أرقام)</label><input type="password" class="ltr" id="rpin" inputmode="numeric" maxlength="8" autocomplete="off">' +
     '<label for="rpin2">تأكيد الرقم السري</label><input type="password" class="ltr" id="rpin2" inputmode="numeric" maxlength="8" autocomplete="off">' +
-    '<div class="btns"><button class="btn" id="rgo">إنشاء الحساب</button></div>' + (users().length ? '<button class="lk" id="rback">لدي حساب — تسجيل الدخول</button>' : ''));
+    '<div class="btns"><button class="btn" id="rgo">إنشاء الحساب</button></div>' +
+    '<div class="btns"><button class="btn" id="rgo">إنشاء الحساب</button></div>' +
+    (users().length ? '<button class="lk" id="rback">لدي حساب — تسجيل الدخول</button>' : '') +
+    '<button class="lk" id="rreset" style="color:#ff6b6b;font-size:13px">🧹 مسح البيانات القديمة والبدء من جديد</button>');
   const go = () => {
     const nm = $('#rn', el).value.trim(), un = $('#rus', el).value.trim(), p1 = $('#rp1', el).value, p2_ = $('#rp2', el).value, pin = norm($('#rpin', el).value).trim(), pin2 = norm($('#rpin2', el).value).trim();
     if (un.length < 3 || /\s/.test(un)) return aerr(el, 'اسم المستخدم 3 أحرف على الأقل وبدون مسافات.');
-    if (users().some(x => x.username.toLowerCase() === un.toLowerCase())) return aerr(el, 'اسم المستخدم مستخدم من قبل، اختر اسمًا آخر.');
+    const existingUser = users().find(x => x.username.toLowerCase() === un.toLowerCase());
+    if (existingUser) {
+      // رسالة أكثر وضوحاً مع خيارات
+      const choice = confirm('يوجد حساب محفوظ بنفس اسم المستخدم على هذا الجهاز.\n\n' +
+        '• اضغط "موافق" لتسجيل الدخول بالحساب القديم (سيُطلب منك كلمة المرور).\n' +
+        '• اضغط "إلغاء" للبقاء في هذه الشاشة واستخدام اسم مستخدم آخر.');
+      if (choice) {
+        showLogin({ prefillUsername: un });
+        return;
+      }
+      return aerr(el, 'اسم المستخدم "' + un + '" محفوظ على هذا الجهاز. اختر اسماً آخر أو سجّل الدخول بالحساب القديم.');
+    }
     if (p1.length < 6) return aerr(el, 'كلمة المرور يجب ألا تقل عن 6 أحرف.');
     if (p1 !== p2_) return aerr(el, 'تأكيد كلمة المرور غير مطابق.');
     if (!/^\d{4,8}$/.test(pin)) return aerr(el, 'الرقم السري يجب أن يتكون من 4 إلى 8 أرقام.');
@@ -1994,12 +2026,30 @@ function showRegister(first) {
   $('#rgo', el).onclick = go;
   el.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
   if ($('#rback', el)) $('#rback', el).onclick = () => showLogin();
+  const rreset = $('#rreset', el);
+  if (rreset) rreset.onclick = () => {
+    if (confirm('سيتم حذف جميع الحسابات والبيانات المحفوظة على هذا الجهاز نهائياً.\n\nهل أنت متأكد؟')) {
+      LS.del('tm.users');
+      LS.del('tm.last');
+      LS.del('tm.d.' + (LS.get('tm.last') || ''));
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('tm.d.')) localStorage.removeItem(k);
+        }
+      } catch (e) { /* ignore */ }
+      SS.del('tm.s');
+      LS.del('tm.fail');
+      toast('تم مسح البيانات. أعد المحاولة الآن.');
+      setTimeout(() => location.reload(), 800);
+    }
+  };
 }
 function showLogin(o) {
   o = o || {};
   const last = users().find(x => x.id === LS.get('tm.last'));
   const el = overlay('<h2>تسجيل الدخول</h2><p class="d">' + (o.resetPin ? 'سجّل الدخول بكلمة المرور ثم عيّن رقمًا سريًا جديدًا' : 'أدخل بيانات حسابك') + '</p><div id="aerr"></div>' +
-    '<label for="lus">اسم المستخدم</label><input type="text" class="ltr" id="lus" autocomplete="username" autocapitalize="none" value="' + esc(last ? last.username : '') + '">' +
+    '<label for="lus">اسم المستخدم</label><input type="text" class="ltr" id="lus" autocomplete="username" autocapitalize="none" value="' + esc(o.prefillUsername || (last ? last.username : '')) + '">' +                     
     '<label for="lpw">كلمة المرور</label><input type="password" id="lpw" autocomplete="current-password">' +
     '<div class="btns"><button class="btn" id="lgo">دخول</button></div><button class="lk" id="lnew">إنشاء حساب جديد</button>');
   const go = () => {
