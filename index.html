@@ -1950,7 +1950,7 @@ function openPhonebook() {
   /* ---------- settings ---------- */
   function openSettings() {
   const c = S.set.colors, fnt = S.set.fonts || { day: 19, notes: 12, sub: 13 };
-  const s = openModal('<div class="shead"><div><h2>الإعدادات</h2><div class="sub" dir="auto">' + esc(S.user.name) + ' · @' + esc(S.user.username) + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
+    const s = openModal('<div class="shead"><div><h2>الإعدادات</h2><div class="sub" dir="auto">' + esc(S.user.name) + ' · @' + esc(S.user.username) + '</div></div><button class="x" data-act="close" aria-label="إغلاق">×</button></div>' +
     '<div class="sec-t">التقويم</div><label class="f">تعديل التاريخ الهجري (زيادة / إنقاص أيام)</label>' +
     '<div class="step num"><button id="om" aria-label="إنقاص يوم">−</button><b id="ov"></b><button id="op" aria-label="زيادة يوم">+</button></div><div class="hint" id="oh" style="text-align:center"></div>' +
     '<label class="f">طريقة عرض الشهر</label><div class="seg" id="sv"><button data-v="h">شهر هجري</button><button data-v="g">شهر ميلادي</button></div>' +
@@ -1965,9 +1965,9 @@ function openPhonebook() {
     '<label class="f">عدد الأيام قبل المناسبة</label><input type="number" id="nbday" min="0" max="30" value="' + (S.set.notify?.days ?? 2) + '">' +
     '<div class="sec-t">التذكيرات المتكررة قبل الموعد</div>' +
     '<label class="sw"><span>تفعيل التذكيرات المتكررة</span><input type="checkbox" id="rpten"' + (S.set.notify?.repeatEnabled ? ' checked' : '') + '><span class="tg"></span></label>' +
-    '<div class="hint">تُطلق التذكيرات التالية قبل الموعد بالساعات المحددة (تعمل فقط في يوم الموعد أو اليوم السابق):</div>' +
+    '<div class="hint" style="line-height:1.7">حدد عدد الساعات المتبقية قبل الموعد التي تريد التنبيه عندها. مثال: 12 ساعة يعني التنبيه قبل الموعد بـ12 ساعة.</div>' +
     '<div id="rptlist" style="margin-top:8px"></div>' +
-    '<div class="btns" style="margin-top:8px"><button class="btn sm sec" id="rptadd">➕ إضافة تذكير</button></div>' +
+    '<div class="btns" style="margin-top:8px"><button class="btn sm sec" id="rptadd" type="button">➕ إضافة تذكير</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn sec" id="nbtest">🔔 اختبار التنبيه</button></div>' +
     '<div id="nstatus" class="hint" style="text-align:center;margin-top:8px"></div>' +
     '<div class="sec-t">البيانات</div><div class="btns" style="margin-top:6px"><button class="btn sec" id="sx">تصدير إلى Excel 97-2003</button><button class="btn sec" id="si">استيراد من Excel 97-2003</button></div>' +
@@ -1979,7 +1979,7 @@ function openPhonebook() {
     '<div class="sec-t">عن التطبيق</div>' +
     '<p class="hint" style="margin-top:8px;line-height:1.8;text-align:center">تقويمي – مهام · الإصدار ' + VERSION + '<br>تصميم: <b>' + DESIGNER.name + '</b><br>البريد: <a href="mailto:' + DESIGNER.email + '" style="color:#e0b3ee">' + DESIGNER.email + '</a><br><button class="btn sm sec" id="smail" style="margin-top:10px">📧 مراسلة المصمم</button></p>' +
     '<p class="hint" style="margin-top:10px;line-height:1.8;text-align:center">تُحفظ بياناتك على هذا الجهاز فقط.<br>التاريخ الهجري وفق تقويم أم القرى (1300 – 1600هـ).</p>');
-  const pv = () => {
+    const pv = () => {
     const o = S.set.off; $('#ov', s).textContent = (o > 0 ? '+' : o < 0 ? '−' : '') + Math.abs(o);
     $('#oh', s).textContent = 'اليوم: ' + hStr(todayN());
     $$('#sv button', s).forEach(b => b.classList.toggle('on', b.dataset.v === S.set.view));
@@ -2086,50 +2086,81 @@ function openPhonebook() {
     window.open('mailto:' + DESIGNER.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   };
     // ---- إدارة التذكيرات المتكررة ----
-    const drawRepeats = () => {
-    const arr = S.set.notify.repeats || [];
+  const drawRepeats = () => {
+    const arr = Array.isArray(S.set.notify.repeats) ? S.set.notify.repeats : [];
     const box = $('#rptlist', s);
     if (!box) return;
     if (!arr.length) {
-      box.innerHTML = '<div class="hint">لا توجد تذكيرات — أضف واحداً بزر "إضافة تذكير"</div>';
+      box.innerHTML = '<div class="hint" style="color:#ff9d6b">لا توجد تذكيرات — اضغط "➕ إضافة تذكير" لإضافة واحد</div>';
       return;
     }
-    box.innerHTML = arr.map((r, i) =>
-      '<div class="sw" style="margin-top:6px;gap:8px">' +
-        '<span style="min-width:40px">قبل</span>' +
-        '<input type="number" min="1" max="72" value="' + (r.hours || 1) + '" data-i="' + i + '" style="width:70px;background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:6px;text-align:center" inputmode="numeric">' +
-        '<span style="min-width:40px">ساعة</span>' +
-        '<label class="sw" style="flex:1;justify-content:flex-end;margin:0;padding:0;border:0;background:transparent">' +
-          '<span style="font-size:12px;color:#aaa">مفعّل</span>' +
-          '<input type="checkbox" data-en="' + i + '"' + (r.enabled ? ' checked' : '') + '>' +
+    box.innerHTML = arr.map((r, i) => {
+      const hours = (r && r.hours != null) ? r.hours : 1;
+      const enabled = r && r.enabled !== false;
+      return '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;background:#2a2a2a;border:1px solid #555;border-radius:10px;padding:10px 12px">' +
+        '<span style="min-width:44px;color:#ddd">قبل</span>' +
+        '<input type="number" min="1" max="72" value="' + hours + '" data-i="' + i + '" inputmode="numeric" style="width:80px;background:#1a1a1a;border:1px solid #666;border-radius:8px;padding:9px;text-align:center;font-size:17px;color:#fff">' +
+        '<span style="min-width:52px;color:#ddd">ساعة</span>' +
+        '<label class="sw" style="flex:1;margin:0;padding:6px 10px;border:0;background:transparent;justify-content:flex-end;gap:8px">' +
+          '<span style="font-size:13px;color:' + (enabled ? '#4caf50' : '#999') + '">' + (enabled ? 'مفعّل' : 'معطّل') + '</span>' +
+          '<input type="checkbox" data-en="' + i + '"' + (enabled ? ' checked' : '') + '>' +
           '<span class="tg"></span>' +
         '</label>' +
-        '<button class="btn sm danger" data-rm="' + i + '" style="min-width:0;padding:6px 10px">حذف</button>' +
-      '</div>'
-    ).join('');
+        '<button class="btn sm danger" data-rm="' + i + '" type="button" style="min-width:0;padding:8px 12px;font-size:14px">حذف</button>' +
+      '</div>';
+    }).join('');
 
-    $$('#rptlist input[data-i]', s).forEach(inp => inp.onchange = () => {
-      const i = +inp.dataset.i;
-      S.set.notify.repeats[i].hours = Math.max(1, Math.min(72, +inp.value || 1));
-      inp.value = S.set.notify.repeats[i].hours;
-      persist(); syncAlarmsToAndroid();
+    // ربط الأحداث
+    $$('#rptlist input[data-i]', s).forEach(inp => {
+      inp.addEventListener('change', () => {
+        const i = +inp.dataset.i;
+        let v = parseInt(inp.value, 10);
+        if (!isFinite(v) || v < 1) v = 1;
+        if (v > 72) v = 72;
+        S.set.notify.repeats[i].hours = v;
+        inp.value = v;
+        persist();
+        try { syncAlarmsToAndroid(); } catch (e) {}
+      });
     });
-    $$('#rptlist input[data-en]', s).forEach(inp => inp.onchange = () => {
-      const i = +inp.dataset.en;
-      S.set.notify.repeats[i].enabled = inp.checked;
-      persist(); syncAlarmsToAndroid();
+    $$('#rptlist input[data-en]', s).forEach(inp => {
+      inp.addEventListener('change', () => {
+        const i = +inp.dataset.en;
+        S.set.notify.repeats[i].enabled = inp.checked;
+        persist();
+        drawRepeats();
+        try { syncAlarmsToAndroid(); } catch (e) {}
+      });
     });
-    $$('#rptlist button[data-rm]', s).forEach(b => b.onclick = () => {
-      S.set.notify.repeats.splice(+b.dataset.rm, 1);
-      persist(); drawRepeats(); syncAlarmsToAndroid();
+    $$('#rptlist button[data-rm]', s).forEach(b => {
+      b.addEventListener('click', () => {
+        S.set.notify.repeats.splice(+b.dataset.rm, 1);
+        persist();
+        drawRepeats();
+        try { syncAlarmsToAndroid(); } catch (e) {}
+      });
     });
   };
-  drawRepeats();
-    if ($('#rpten', s)) $('#rpten', s).onchange = ev => {
+
+  // استدعاء أولي بعد تأكد من وجود #rptlist
+  setTimeout(drawRepeats, 0);
+
+  const rptenEl = $('#rpten', s);
+  if (rptenEl) rptenEl.addEventListener('change', ev => {
     S.set.notify.repeatEnabled = ev.target.checked;
-    persist(); syncAlarmsToAndroid();
-  };
-  if ($('#rptadd', s)) $('#rptadd', s).onclick = () => {
+    persist();
+    try { syncAlarmsToAndroid(); } catch (e) {}
+  });
+
+  const rptaddEl = $('#rptadd', s);
+  if (rptaddEl) rptaddEl.addEventListener('click', () => {
+    if (!Array.isArray(S.set.notify.repeats)) S.set.notify.repeats = [];
+    S.set.notify.repeats.push({ hours: 2, enabled: true });
+    persist();
+    drawRepeats();
+    try { syncAlarmsToAndroid(); } catch (e) {}
+  });
+    if ($('#rptadd', s)) $('#rptadd', s).onclick = () => {
     S.set.notify.repeats.push({ hours: 2, enabled: true });
     persist(); drawRepeats(); syncAlarmsToAndroid();
   };
