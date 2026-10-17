@@ -687,22 +687,44 @@ const SS = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { retu
 const DEF_COLORS = { empty: '#424242', reg: '#1d4f8f', done: '#1f7a3d', bg: '#303030' };
 const users = () => LS.get('tm.users') || [];
 const saveUsers = u => LS.set('tm.users', u);
-
-function normData(d) {
+  function normData(d) {
   d = d && typeof d === 'object' ? d : {};
   d.v = 1; d.entries = Array.isArray(d.entries) ? d.entries : [];
   d.types = Array.isArray(d.types) ? d.types : [];
   d.blocked = Array.isArray(d.blocked) ? d.blocked : [];
-  d.set = Object.assign({ off: 0, view: 'h', notify: { enabled: false, days: 2 }, fonts: { day: 19, notes: 12, sub: 13 } }, d.set || {});
+  d.set = Object.assign({
+    off: 0, view: 'h',
+    notify: {
+      enabled: true,
+      days: 2,
+      repeatEnabled: true,
+      repeats: [
+        { hours: 12, enabled: true },
+        { hours: 6,  enabled: true },
+        { hours: 4,  enabled: true },
+        { hours: 1,  enabled: true }
+      ],
+      firstRunNotified: false
+    },
+    fonts: { day: 19, notes: 12, sub: 13 }
+  }, d.set || {});
   d.set.colors = Object.assign({}, DEF_COLORS, d.set.colors || {});
   d.set.off = Math.max(-30, Math.min(30, parseInt(d.set.off, 10) || 0));
   if (d.set.view !== 'g') d.set.view = 'h';
-  if (!d.set.notify || typeof d.set.notify !== 'object') d.set.notify = { enabled: false, days: 2 };
+  if (!d.set.notify || typeof d.set.notify !== 'object') {
+    d.set.notify = { enabled: true, days: 2, repeatEnabled: true,
+      repeats: [{hours:12,enabled:true},{hours:6,enabled:true},{hours:4,enabled:true},{hours:1,enabled:true}],
+      firstRunNotified: false };
+  }
+  if (!Array.isArray(d.set.notify.repeats)) {
+    d.set.notify.repeats = [{hours:12,enabled:true},{hours:6,enabled:true},{hours:4,enabled:true},{hours:1,enabled:true}];
+  }
+  if (d.set.notify.repeatEnabled === undefined) d.set.notify.repeatEnabled = true;
+  if (d.set.notify.firstRunNotified === undefined) d.set.notify.firstRunNotified = false;
   if (!d.set.fonts || typeof d.set.fonts !== 'object') d.set.fonts = { day: 19, notes: 12, sub: 13 };
   return d;
 }
-
-const S = { user: null, data: null, set: null, view: { y: 1448, m: 1 }, sel: null, hidden: 0 };
+  const S = { user: null, data: null, set: null, view: { y: 1448, m: 1 }, sel: null, hidden: 0 };
   let dayOpen = null;
 function persist() {
   if (!S.user) return;
@@ -1174,20 +1196,37 @@ function openRestoreDialog(entry, parentSheet) {
   hint();
   
   // ---- add new type ----
-  f('ftypeadd').onclick = () => {
-    const nv = f('ftypenew').value.trim();
-    if (!nv) return toast('اكتب اسم النوع أولاً');
+    f('ftypeadd').onclick = () => {
+    const raw = f('ftypenew').value.trim();
+    if (!raw) return toast('اكتب اسم النوع أولاً');
+    
+    const allExisting = allTypesIncludingBlocked();
+    const exactMatch = allExisting.find(t => t === raw);
+    
+    if (exactMatch) {
+      if (S.data.blocked && S.data.blocked.includes(exactMatch)) {
+        S.data.blocked = S.data.blocked.filter(x => x !== exactMatch);
+        persist();
+        toast('تم استعادة النوع: ' + exactMatch);
+      } else {
+        toast('هذا النوع موجود بالفعل — تم اختياره');
+      }
+      f('ftypenew').value = '';
+      fillTypes(exactMatch);
+      return;
+    }
+    
     const ct = customTypes();
-    if (!ct.includes(nv)) { ct.push(nv); persist(); toast('تمت إضافة النوع: ' + nv); }
-    else toast('هذا النوع موجود بالفعل');
+    if (!ct.includes(raw)) { ct.push(raw); }
+    persist();
+    toast('تمت إضافة النوع: ' + raw);
     f('ftypenew').value = '';
-    fillTypes(nv);
+    fillTypes(raw);
   };
-  f('ftypenew').addEventListener('keydown', ev => {
+    f('ftypenew').addEventListener('keydown', ev => {
     if (ev.key === 'Enter') { ev.preventDefault(); f('ftypeadd').click(); }
   });
-  
-  // ---- open Google Maps for search ----
+    // ---- open Google Maps for search ----
   f('fmapopen').onclick = () => {
     const current = f('floc').value.trim();
     // إذا كان هناك رابط أو نص، افتحه مباشرة
@@ -1249,8 +1288,15 @@ function openRestoreDialog(entry, parentSheet) {
       S.data.entries.push(Object.assign({ id: uid(), ts: Date.now() }, rec));
     }
     if (type) {
-      const ct = customTypes();
-      if (!ct.includes(type) && !DEF_TYPES.includes(type)) ct.push(type);
+      const allExisting = allTypesIncludingBlocked();
+      const exact = allExisting.find(t => t === type);
+      if (!exact) {
+        const ct = customTypes();
+        if (!ct.includes(type)) ct.push(type);
+      }
+      if (S.data.blocked) {
+        S.data.blocked = S.data.blocked.filter(x => x !== type);
+      }
     }
     persist();
     closeModal(sheet);
@@ -1398,37 +1444,93 @@ function openTypesManager() {
 }
 /* ---------- notifications ---------- */
 /* إرسال التنبيهات إلى Android لجدولتها */
-function syncAlarmsToAndroid() {
+  function syncAlarmsToAndroid() {
   if (!window.AndroidBridge || !window.AndroidBridge.scheduleAlarms) return;
   if (!S.set.notify || !S.set.notify.enabled) {
-    window.AndroidBridge.scheduleAlarms('[]', false, S.set.notify?.days ?? 2);
+    window.AndroidBridge.scheduleAlarms('[]', false, S.set.notify?.days ?? 2, '[]');
     return;
   }
   const days = S.set.notify.days ?? 2;
   const today = todayN();
   const list = [];
+  
+  let repeats = [];
+  if (S.set.notify.repeatEnabled && Array.isArray(S.set.notify.repeats)) {
+    repeats = S.set.notify.repeats
+      .filter(r => r && r.enabled && r.hours > 0)
+      .map(r => Number(r.hours));
+  }
+  
   for (const e of S.data.entries) {
     if (e.done || e.cancelled || e.postponed) continue;
     const n = isoToN(e.date);
     if (isNaN(n)) continue;
     const diff = n - today;
-    // جدول التنبيهات للمناسبات القادمة فقط (خلال سنة)
     if (diff >= 0 && diff <= 365) {
       list.push({
         id: e.id,
         type: e.type || 'مناسبة',
         name: e.name || '',
+        desc: e.desc || '',
         date: e.date,
         daysBefore: days
       });
     }
   }
+  
   try {
-    window.AndroidBridge.scheduleAlarms(JSON.stringify(list), true, days);
+    window.AndroidBridge.scheduleAlarms(
+      JSON.stringify(list),
+      true,
+      days,
+      JSON.stringify(repeats)
+    );
   } catch (err) { /* ignore */ }
 }
-
-function checkNotifications() {
+  function firstRunNotify() {
+  if (!S.set.notify || !S.set.notify.enabled) return;
+  if (S.set.notify.firstRunNotified) return;
+  
+  const today = todayN();
+  const urgent = S.data.entries.filter(e => {
+    if (e.done || e.cancelled || e.postponed) return false;
+    const n = isoToN(e.date);
+    if (isNaN(n)) return false;
+    const diff = n - today;
+    return diff >= 0 && diff <= 1;
+  });
+  
+  S.set.notify.firstRunNotified = true;
+  persist();
+  
+  if (!urgent.length) return;
+  
+  const isAndroid = !!window.AndroidBridge;
+  const title = 'تقويمي – مهام';
+  
+  if (isAndroid && window.AndroidBridge.notify) {
+    urgent.forEach((e, i) => {
+      const n = isoToN(e.date);
+      const diff = n - today;
+      const when = diff === 0 ? 'اليوم' : 'غداً';
+      const body = '⏰ ' + (e.type || 'مناسبة') + (e.name ? ' – ' + e.name : '') + '\n' + when + ' (' + hStr(n) + ')';
+      setTimeout(() => {
+        try { window.AndroidBridge.notify(title, body); } catch (err) {}
+      }, 1500 + i * 800);
+    });
+  } else if ('Notification' in window && Notification.permission === 'granted') {
+    urgent.forEach((e, i) => {
+      const n = isoToN(e.date);
+      const diff = n - today;
+      const when = diff === 0 ? 'اليوم' : 'غداً';
+      const body = '⏰ ' + (e.type || 'مناسبة') + (e.name ? ' – ' + e.name : '') + '\n' + when + ' (' + hStr(n) + ')';
+      setTimeout(() => {
+        try { new Notification(title, { body }); } catch (err) {}
+      }, 1500 + i * 800);
+    });
+  }
+}
+  function checkNotifications() {
   if (!S.set.notify || !S.set.notify.enabled) return;
   const days = S.set.notify.days ?? 2;
   const today = todayN();
@@ -1461,8 +1563,7 @@ function checkNotifications() {
   }
   LS.set('tm.notified', notified);
 }
-
-/* دالة تُستدعى من Android عند تغيير حالة الإذن */
+  /* دالة تُستدعى من Android عند تغيير حالة الإذن */
 window.__notifPermission = function(granted) {
   if (granted) {
     toast('✅ تم تفعيل التنبيهات');
@@ -1836,6 +1937,11 @@ function openPhonebook() {
     '<div class="sec-t">التنبيهات</div>' +
     '<label class="sw"><span>تفعيل التنبيه قبل المناسبة</span><input type="checkbox" id="nben"' + (S.set.notify?.enabled ? ' checked' : '') + '><span class="tg"></span></label>' +
     '<label class="f">عدد الأيام قبل المناسبة</label><input type="number" id="nbday" min="0" max="30" value="' + (S.set.notify?.days ?? 2) + '">' +
+    '<div class="sec-t">التذكيرات المتكررة قبل الموعد</div>' +
+    '<label class="sw"><span>تفعيل التذكيرات المتكررة</span><input type="checkbox" id="rpten"' + (S.set.notify?.repeatEnabled ? ' checked' : '') + '><span class="tg"></span></label>' +
+    '<div class="hint">تُطلق التذكيرات التالية قبل الموعد بالساعات المحددة (تعمل فقط في يوم الموعد أو اليوم السابق):</div>' +
+    '<div id="rptlist" style="margin-top:8px"></div>' +
+    '<div class="btns" style="margin-top:8px"><button class="btn sm sec" id="rptadd">➕ إضافة تذكير</button></div>' +
     '<div class="btns" style="margin-top:8px"><button class="btn sec" id="nbtest">🔔 اختبار التنبيه</button></div>' +
     '<div id="nstatus" class="hint" style="text-align:center;margin-top:8px"></div>' +
     '<div class="sec-t">البيانات</div><div class="btns" style="margin-top:6px"><button class="btn sec" id="sx">تصدير إلى Excel 97-2003</button><button class="btn sec" id="si">استيراد من Excel 97-2003</button></div>' +
@@ -1953,7 +2059,47 @@ function openPhonebook() {
     }
     window.open('mailto:' + DESIGNER.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   };
-  const updateNotifStatus = () => {
+    // ---- إدارة التذكيرات المتكررة ----
+  const drawRepeats = () => {
+    const arr = S.set.notify.repeats || [];
+    const box = $('#rptlist', s);
+    if (!box) return;
+    box.innerHTML = arr.map((r, i) =>
+      '<div class="sw" style="margin-top:6px">' +
+        '<span>قبل</span>' +
+        '<input type="number" min="1" max="72" value="' + (r.hours || 1) + '" data-i="' + i + '" style="width:70px;background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:6px;text-align:center">' +
+        '<span>ساعة</span>' +
+        '<input type="checkbox" data-en="' + i + '"' + (r.enabled ? ' checked' : '') + '>' +
+        '<button class="btn sm danger" data-rm="' + i + '" style="min-width:0;padding:6px 10px">حذف</button>' +
+      '</div>'
+    ).join('') || '<div class="hint">لا توجد تذكيرات — أضف واحداً</div>';
+    
+    $$('#rptlist input[data-i]', s).forEach(inp => inp.onchange = () => {
+      const i = +inp.dataset.i;
+      S.set.notify.repeats[i].hours = Math.max(1, Math.min(72, +inp.value || 1));
+      persist(); syncAlarmsToAndroid();
+    });
+    $$('#rptlist input[data-en]', s).forEach(inp => inp.onchange = () => {
+      const i = +inp.dataset.en;
+      S.set.notify.repeats[i].enabled = inp.checked;
+      persist(); syncAlarmsToAndroid();
+    });
+    $$('#rptlist button[data-rm]', s).forEach(b => b.onclick = () => {
+      S.set.notify.repeats.splice(+b.dataset.rm, 1);
+      persist(); drawRepeats(); syncAlarmsToAndroid();
+    });
+  };
+  drawRepeats();
+
+  if ($('#rpten', s)) $('#rpten', s).onchange = ev => {
+    S.set.notify.repeatEnabled = ev.target.checked;
+    persist(); syncAlarmsToAndroid();
+  };
+  if ($('#rptadd', s)) $('#rptadd', s).onclick = () => {
+    S.set.notify.repeats.push({ hours: 2, enabled: true });
+    persist(); drawRepeats(); syncAlarmsToAndroid();
+  };
+    const updateNotifStatus = () => {
     const el = $('#nstatus', s);
     if (!el) return;
     if (window.AndroidBridge) {
@@ -2039,7 +2185,13 @@ const needWarn = () => !window.AndroidBridge && !LS.get('tm.nowarn') && (locatio
     $('#warn').classList.toggle('hide', !needWarn());
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }
     if (after) after();
-    setTimeout(() => { try { checkNotifications(); } catch (e) { /* ignore */ } }, 1500);
+    setTimeout(() => { 
+      try { 
+        checkNotifications(); 
+        firstRunNotify(); 
+        syncAlarmsToAndroid(); 
+      } catch (e) { /* ignore */ } 
+    }, 1500);
   } catch (err) {
     // في حال فشل فتح التطبيق، أظهر رسالة واضحة
     console.error('Enter failed:', err);
