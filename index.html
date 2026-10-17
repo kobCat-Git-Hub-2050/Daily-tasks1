@@ -711,16 +711,42 @@ const saveUsers = u => LS.set('tm.users', u);
   d.set.colors = Object.assign({}, DEF_COLORS, d.set.colors || {});
   d.set.off = Math.max(-30, Math.min(30, parseInt(d.set.off, 10) || 0));
   if (d.set.view !== 'g') d.set.view = 'h';
-  if (!d.set.notify || typeof d.set.notify !== 'object') {
-    d.set.notify = { enabled: true, days: 2, repeatEnabled: true,
-      repeats: [{hours:12,enabled:true},{hours:6,enabled:true},{hours:4,enabled:true},{hours:1,enabled:true}],
-      firstRunNotified: false };
+
+  // ===== إصلاح كائن التنبيه =====
+  if (!d.set.notify || typeof d.set.notify !== 'object') d.set.notify = {};
+  const N = d.set.notify;
+
+  if (N.enabled === undefined) N.enabled = true;
+  if (N.days === undefined) N.days = 2;
+  if (N.repeatEnabled === undefined) N.repeatEnabled = true;
+  if (N.firstRunNotified === undefined) N.firstRunNotified = false;
+
+  // إذا لم توجد مصفوفة repeats أو كانت فارغة → ضع الافتراضية
+  if (!Array.isArray(N.repeats) || N.repeats.length === 0) {
+    N.repeats = [
+      { hours: 12, enabled: true },
+      { hours: 6,  enabled: true },
+      { hours: 4,  enabled: true },
+      { hours: 1,  enabled: true }
+    ];
+  } else {
+    // نظّف العناصر التالفة
+    N.repeats = N.repeats
+      .filter(r => r && typeof r === 'object')
+      .map(r => ({
+        hours: Math.max(1, Math.min(72, parseInt(r.hours, 10) || 1)),
+        enabled: r.enabled !== false
+      }));
+    if (N.repeats.length === 0) {
+      N.repeats = [
+        { hours: 12, enabled: true },
+        { hours: 6,  enabled: true },
+        { hours: 4,  enabled: true },
+        { hours: 1,  enabled: true }
+      ];
+    }
   }
-  if (!Array.isArray(d.set.notify.repeats)) {
-    d.set.notify.repeats = [{hours:12,enabled:true},{hours:6,enabled:true},{hours:4,enabled:true},{hours:1,enabled:true}];
-  }
-  if (d.set.notify.repeatEnabled === undefined) d.set.notify.repeatEnabled = true;
-  if (d.set.notify.firstRunNotified === undefined) d.set.notify.firstRunNotified = false;
+
   if (!d.set.fonts || typeof d.set.fonts !== 'object') d.set.fonts = { day: 19, notes: 12, sub: 13 };
   return d;
 }
@@ -2060,23 +2086,32 @@ function openPhonebook() {
     window.open('mailto:' + DESIGNER.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
   };
     // ---- إدارة التذكيرات المتكررة ----
-  const drawRepeats = () => {
+    const drawRepeats = () => {
     const arr = S.set.notify.repeats || [];
     const box = $('#rptlist', s);
     if (!box) return;
+    if (!arr.length) {
+      box.innerHTML = '<div class="hint">لا توجد تذكيرات — أضف واحداً بزر "إضافة تذكير"</div>';
+      return;
+    }
     box.innerHTML = arr.map((r, i) =>
-      '<div class="sw" style="margin-top:6px">' +
-        '<span>قبل</span>' +
-        '<input type="number" min="1" max="72" value="' + (r.hours || 1) + '" data-i="' + i + '" style="width:70px;background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:6px;text-align:center">' +
-        '<span>ساعة</span>' +
-        '<input type="checkbox" data-en="' + i + '"' + (r.enabled ? ' checked' : '') + '>' +
+      '<div class="sw" style="margin-top:6px;gap:8px">' +
+        '<span style="min-width:40px">قبل</span>' +
+        '<input type="number" min="1" max="72" value="' + (r.hours || 1) + '" data-i="' + i + '" style="width:70px;background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:6px;text-align:center" inputmode="numeric">' +
+        '<span style="min-width:40px">ساعة</span>' +
+        '<label class="sw" style="flex:1;justify-content:flex-end;margin:0;padding:0;border:0;background:transparent">' +
+          '<span style="font-size:12px;color:#aaa">مفعّل</span>' +
+          '<input type="checkbox" data-en="' + i + '"' + (r.enabled ? ' checked' : '') + '>' +
+          '<span class="tg"></span>' +
+        '</label>' +
         '<button class="btn sm danger" data-rm="' + i + '" style="min-width:0;padding:6px 10px">حذف</button>' +
       '</div>'
-    ).join('') || '<div class="hint">لا توجد تذكيرات — أضف واحداً</div>';
-    
+    ).join('');
+
     $$('#rptlist input[data-i]', s).forEach(inp => inp.onchange = () => {
       const i = +inp.dataset.i;
       S.set.notify.repeats[i].hours = Math.max(1, Math.min(72, +inp.value || 1));
+      inp.value = S.set.notify.repeats[i].hours;
       persist(); syncAlarmsToAndroid();
     });
     $$('#rptlist input[data-en]', s).forEach(inp => inp.onchange = () => {
@@ -2090,8 +2125,7 @@ function openPhonebook() {
     });
   };
   drawRepeats();
-
-  if ($('#rpten', s)) $('#rpten', s).onchange = ev => {
+    if ($('#rpten', s)) $('#rpten', s).onchange = ev => {
     S.set.notify.repeatEnabled = ev.target.checked;
     persist(); syncAlarmsToAndroid();
   };
